@@ -1,0 +1,4 @@
+*.pgn
+*.pgn.zst
+*.txt
+*.ipynb_checkpoints/
