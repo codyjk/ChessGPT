@@ -4,13 +4,24 @@ import os
 import re
 import sys
 
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 
 METADATA_PATTERN = re.compile(r'^\s*\[(.*)\]\s*$')
 MOVE_PATTERN = re.compile(r'(\d+\.)\s*([BNRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[BNRQ])?(?:e\.p\.)?[+#]?|O-O(?:-O)?)\s*(?:\{[^}]*\})?\s*(?:(\d+)\.{3})?\s*([BNRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[BNRQ])?(?:e\.p\.)?[+#]?|O-O(?:-O)?)?')
 RESULT_PATTERN = re.compile(r'(1-0|0-1|1/2-1/2)')
+WHITE_ELO_PATTERN = re.compile(r'^\s*\[WhiteElo "(\d+)"\]\s*$')
+BLACK_ELO_PATTERN = re.compile(r'^\s*\[BlackElo "(\d+)"\]\s*$')
 
 RawGame = namedtuple('RawGame', ['metadata', 'moves'])
+
+INFINITY = float('inf')
+DIRECTORY_TO_ELO_RATING_RANGE = {
+    'beginner': (0, 1250),
+    'intermediate': (1250, 1750),
+    'master': (1750, 2500),
+    'grandmaster': (2500, INFINITY),
+    'unknown': (INFINITY, INFINITY),
+}
 
 
 def is_metadata_line(line):
@@ -59,34 +70,64 @@ def process_raw_games_from_file(file):
             continue
 
 
+# The metadata contains [WhiteElo "1250"] and [BlackElo "1750"].
+# Take the average, then find the elo range that contains it.
+def get_elo_directory(raw_game):
+    white_elo = None
+    black_elo = None
+
+    for metadata_line in raw_game.metadata:
+        if WHITE_ELO_PATTERN.search(metadata_line):
+            white_elo = WHITE_ELO_PATTERN.search(metadata_line)
+        elif BLACK_ELO_PATTERN.search(metadata_line):
+            black_elo = BLACK_ELO_PATTERN.search(metadata_line)
+
+    if not white_elo or not black_elo:
+        return 'unknown'
+
+    white_elo = int(white_elo.group(1))
+    black_elo = int(black_elo.group(1))
+
+    average_elo = (white_elo + black_elo) / 2
+    for directory, (min_elo, max_elo) in DIRECTORY_TO_ELO_RATING_RANGE.items():
+        if min_elo < average_elo <= max_elo:
+            return directory
+
+    return 'unknown'
+
+
 def main():
     try:
         input_file = sys.argv[1]
-        output_file = sys.argv[2]
+        output_directory = sys.argv[2]
     except IndexError:
-        print("Usage: python3 reduce-pgn-to-move-lists.py input-file output-file")
+        print("Usage: python3 reduce-pgn-to-move-lists.py input-file output-directory")
         sys.exit(1)
 
-    if not os.path.exists(input_file):
-        print(f"Input file {input_file} does not exist.")
+    if not os.path.exists(output_directory):
+        print(f"Output directory {output_directory} does not exist.")
         sys.exit(1)
 
-    if os.path.exists(output_file):
-        print(f"Output file {output_file} already exists.")
-        sys.exit(1)
+    file_write_counters = defaultdict(int)
+    file_handles = {}
+    for directory in DIRECTORY_TO_ELO_RATING_RANGE.keys():
+        file = open(os.path.join(output_directory, f'{directory}.txt'), 'w')
+        file_handles[directory] = file
 
-    target = open(output_file, 'w')
-
-    written = 0
     with open(input_file, 'r') as file:
         print("Processing file")
         for raw_game in process_raw_games_from_file(file):
             processed_moves = process_chess_moves(raw_game.moves)
-            if raw_game_has_moves(raw_game):
-                target.write(processed_moves + '\n')
-                written += 1
+            if not raw_game_has_moves(raw_game):
+                continue
 
-    print(f"Processed {written} games.")
+            directory = get_elo_directory(raw_game)
+            file_handles[directory].write(processed_moves + '\n')
+            file_write_counters[directory] += 1
+
+    for directory, file_handle in file_handles.items():
+        print(f"Processed {file_write_counters[directory]} games in {directory}.")
+        file_handle.close()
 
 
 if __name__ == '__main__':
