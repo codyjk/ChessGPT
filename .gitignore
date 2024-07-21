@@ -2,3 +2,5 @@
 *.pgn.zst
 *.txt
 *.ipynb_checkpoints/
+*.pth
+out/*
