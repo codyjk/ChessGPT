@@ -1,0 +1,61 @@
+[tool.poetry]
+name = "chess-llm"
+version = "0.1.0"
+description = ""
+authors = ["Cody Joseph Krainock <me@codyjoseph.com>"]
+readme = "README.md"
+packages = [{include = "chess_model", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+torch = "^2.4.0"
+tqdm = "^4.66.5"
+transformers = "^4.44.0"
+
+[tool.poetry.group.dev.dependencies]
+flake8 = "^7.1.1"
+black = "^24.8.0"
+isort = "^5.13.2"
+mypy = "^1.11.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+train = "scripts.train_model:main"
+
+[tool.black]
+line-length = 88
+target-version = ['py36', 'py37', 'py38', 'py39', 'py310']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+    | \.git
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ['E203', 'E501']
+
+[tool.mypy]
+python_version = 3.8
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
