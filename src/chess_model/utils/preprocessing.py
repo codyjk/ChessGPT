@@ -21,7 +21,9 @@ def process_game(game):
             yield context, next_move, is_checkmate, ""
 
 
-def preprocess_data(input_file, train_file, val_file, max_context_length, val_split):
+def prepare_training_data(
+    input_file, train_file, val_file, max_context_length, val_split
+):
     with open(train_file, "w", newline="") as train_outfile, open(
         val_file, "w", newline=""
     ) as val_outfile:

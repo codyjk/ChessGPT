@@ -25,6 +25,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 reduce-pgn = "scripts.reduce_pgn_to_moves:main"
+prepare-training-data = "scripts.prepare_training_data:main"
 train = "scripts.train_model:main"
 
 [tool.black]
