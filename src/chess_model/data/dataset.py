@@ -4,34 +4,34 @@ import mmap
 import torch
 from torch.utils.data import Dataset
 
-"""
-Reads a CSV file with chess game examples in the following format:
-
-```
-context,next_move,is_checkmate,outcome
-,d4,0,
-d4,e6,0,
-d4 e6 Nf3,b6,0,
-d4 e6 Nf3 b6,c4,0,
-d4 e6 Nf3 b6 c4,Bb7,0,
-d4 e6 Nf3 b6 c4 Bb7,Nc3,0,
-d4 e6 Nf3 b6 c4 Bb7 Nc3,Bb4,0,
-d4 e6 Nf3 b6 c4 Bb7 Nc3 Bb4,g3,0,
-d4 e6 Nf3 b6 c4 Bb7 Nc3 Bb4 g3,f5,0,
-...
-```
-
-Each example is composed of a context (a list of previous moves), a next move,
-a boolean indicating if the game is a checkmate, and an outcome (1-0, 0-1, or
-1/2-1/2).
-
-The implementation does not load all data into memory at once, but rather
-caches the line offsets of the CSV file. This allows for efficient random
-access to the data while minimizing memory usage.
-"""
-
 
 class ChessDataset(Dataset):
+    """
+    Reads a CSV file with chess game examples in the following format:
+
+    ```
+    context,next_move,is_checkmate,outcome
+    ,d4,0,
+    d4,e6,0,
+    d4 e6 Nf3,b6,0,
+    d4 e6 Nf3 b6,c4,0,
+    d4 e6 Nf3 b6 c4,Bb7,0,
+    d4 e6 Nf3 b6 c4 Bb7,Nc3,0,
+    d4 e6 Nf3 b6 c4 Bb7 Nc3,Bb4,0,
+    d4 e6 Nf3 b6 c4 Bb7 Nc3 Bb4,g3,0,
+    d4 e6 Nf3 b6 c4 Bb7 Nc3 Bb4 g3,f5,0,
+    ...
+    ```
+
+    Each example is composed of a context (a list of previous moves), a next move,
+    a boolean indicating if the game is a checkmate, and an outcome (1-0, 0-1, or
+    1/2-1/2).
+
+    The implementation does not load all data into memory at once, but rather
+    caches the line offsets of the CSV file. This allows for efficient random
+    access to the data while minimizing memory usage.
+    """
+
     def __init__(self, csv_file, tokenizer, max_length=50):
         self.csv_file = csv_file
         self.tokenizer = tokenizer

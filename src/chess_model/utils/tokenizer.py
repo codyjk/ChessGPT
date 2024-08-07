@@ -3,6 +3,10 @@ UNK_TOKEN = "[UNK]"
 
 
 class ChessTokenizer:
+    """
+    A tokenizer for chess moves.
+    """
+
     def __init__(self):
         self.move_to_id = {PAD_TOKEN: 0, UNK_TOKEN: 1}
         self.id_to_move = {0: PAD_TOKEN, 1: UNK_TOKEN}
