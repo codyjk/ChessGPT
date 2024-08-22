@@ -3,14 +3,10 @@ import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from chess_model.data.progressive_dataset import ProgressiveDataset
 from chess_model.utils.tokenizer import ChessTokenizer
-
-# Maybe parameterize this?
-DATALOADER_BATCH_SIZE = 256
 
 
 def fit_tokenizer(csv_file):
@@ -27,38 +23,23 @@ def fit_tokenizer(csv_file):
     return tokenizer
 
 
-def train_model(model, train_dataset, val_dataset, num_epochs, learning_rate, device):
+def train_model(
+    model, train_dataloader, val_dataloader, num_epochs, learning_rate, device
+):
     model.to(device)
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
     next_move_criterion = nn.CrossEntropyLoss()
 
-    progressive_dataset = ProgressiveDataset(train_dataset)
-    val_dataloader = DataLoader(val_dataset, batch_size=DATALOADER_BATCH_SIZE)
-
-    overall_progress_bar = tqdm(total=num_epochs, desc="Overall Progress", position=0)
+    total_steps = num_epochs * len(train_dataloader)
+    progress_bar = tqdm(total=total_steps, desc="Training Progress")
 
     for epoch in range(num_epochs):
         model.train()
         total_loss = 0
 
-        # Recreate the train_dataloader each epoch to account for the grown dataset
-        train_dataloader = DataLoader(
-            progressive_dataset, batch_size=DATALOADER_BATCH_SIZE, shuffle=True
-        )
-
-        # Create a progress bar for each epoch
-        epoch_progress_bar = tqdm(
-            total=len(train_dataloader),
-            desc=f"Epoch {epoch+1}/{num_epochs}",
-            position=1,
-            leave=False,
-        )
-
         for batch in train_dataloader:
             input_ids = batch["input_ids"].to(device)
             next_move_labels = batch["labels"].to(device)
-            # The dataset also has an `is_checkmate` label and `outcome` label,
-            # which we are currently not using.
 
             optimizer.zero_grad()
 
@@ -70,20 +51,13 @@ def train_model(model, train_dataset, val_dataset, num_epochs, learning_rate, de
 
             total_loss += loss.item()
 
-            # Update epoch progress bar
-            epoch_progress_bar.update(1)
-            epoch_progress_bar.set_postfix({"loss": f"{loss.item():.4f}"})
+            # Update progress bar
+            progress_bar.update(1)
+            progress_bar.set_postfix({"epoch": epoch + 1, "loss": f"{loss.item():.4f}"})
 
         avg_loss = total_loss / len(train_dataloader)
 
         # Validation
-        validation_progress_bar = tqdm(
-            total=len(val_dataloader),
-            desc="Validation",
-            position=2,
-            leave=False,
-        )
-
         model.eval()
         val_loss = 0
         with torch.no_grad():
@@ -96,38 +70,22 @@ def train_model(model, train_dataset, val_dataset, num_epochs, learning_rate, de
 
                 val_loss += loss.item()
 
-                validation_progress_bar.update(1)
-                validation_progress_bar.set_postfix({"loss": f"{loss.item():.4f}"})
-
         avg_val_loss = val_loss / len(val_dataloader)
 
-        # Grow the dataset
-        progressive_dataset.grow()
-
-        # Close the epoch progress bar
-        epoch_progress_bar.close()
-
-        # Update overall progress bar
-        overall_progress_bar.update(1)
-        overall_progress_bar.set_postfix(
-            {
-                "Train Loss": f"{avg_loss:.4f}",
-                "Val Loss": f"{avg_val_loss:.4f}",
-                "Samples": len(progressive_dataset),
-            }
+        print(
+            f"\nEpoch {epoch+1}/{num_epochs}, Train Loss: {avg_loss:.4f}, Val Loss: {avg_val_loss:.4f}"
         )
 
-    overall_progress_bar.close()
+    progress_bar.close()
     return model
 
 
-def calculate_random_baseline(dataset, vocab_size, device):
+def calculate_random_baseline(dataloader, vocab_size, device):
     total_loss = 0
     next_move_criterion = nn.CrossEntropyLoss()
-    dataloader = DataLoader(dataset, batch_size=DATALOADER_BATCH_SIZE)
 
     for batch in tqdm(dataloader, desc="Calculating random baseline"):
-        batch_size = batch["labels"].size(0)
+        batch_size = batch["input_ids"].size(0)
 
         random_next_move_logits = torch.rand(batch_size, vocab_size).to(device)
         loss = next_move_criterion(random_next_move_logits, batch["labels"].to(device))

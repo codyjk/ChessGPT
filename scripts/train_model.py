@@ -1,6 +1,7 @@
 import argparse
 
 import torch
+from torch.utils.data import DataLoader
 
 from chess_model import (
     ChessDataset,
@@ -16,6 +17,7 @@ DEFAULT_NUM_EMBEDDINGS = 64
 DEFAULT_NUM_EPOCHS = 5
 DEFAULT_OUTPUT_FILE = "out/chess_transformer_model.pth"
 DEFAULT_INITIAL_LEARNING_RATE = 1e-3
+DEFAULT_BATCH_SIZE = 128
 
 
 def main():
@@ -23,6 +25,56 @@ def main():
     Usage: poetry run train --training-data out/training-data.csv --val-data out/validation-data.csv
     """
 
+    parser = build_arg_parser()
+    args = parser.parse_args()
+    print_training_header(args)
+
+    # Initialize tokenizer and model
+    print("Initializing tokenizer...")
+    tokenizer = fit_tokenizer(args.training_data)
+    print(f"Tokenizer initialized with vocab_size={tokenizer.vocab_size}")
+    model = ChessTransformer(
+        vocab_size=tokenizer.vocab_size,
+        n_positions=args.max_length,
+        n_embd=args.num_embeddings,
+    )
+
+    # Load and prepare data
+    print("Loading training/validation data...")
+    train_dataset = ChessDataset(
+        args.training_data, tokenizer, max_length=args.max_length
+    )
+    val_dataset = ChessDataset(args.val_data, tokenizer, max_length=args.max_length)
+
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size)
+    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
+
+    # Get the appropriate device
+    device = get_device()
+    print(f"Using device: {device}")
+
+    # Calculate random baseline loss
+    random_baseline_loss = calculate_random_baseline(
+        train_dataloader, model.config.vocab_size, device
+    )
+    print(f"Random Baseline Loss: {random_baseline_loss:.4f}")
+
+    # Train the model
+    trained_model = train_model(
+        model,
+        train_dataloader,
+        val_dataloader,
+        num_epochs=args.num_epochs,
+        learning_rate=1e-3,
+        device=device,
+    )
+
+    # Save the trained model
+    output_file = open(args.output_file, "wb")
+    torch.save(trained_model.state_dict(), output_file)
+
+
+def build_arg_parser():
     parser = argparse.ArgumentParser(description="Train the LLM.")
     parser.add_argument(
         "--training-data",
@@ -71,8 +123,18 @@ def main():
         required=False,
         default=DEFAULT_INITIAL_LEARNING_RATE,
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        help=f"The batch size to use. Default: {DEFAULT_BATCH_SIZE}",
+        required=False,
+        default=DEFAULT_BATCH_SIZE,
+    )
 
+    return parser
+
+
+def print_training_header(args):
     print(
         "###################################################################################################"
     )
@@ -84,47 +146,7 @@ def main():
     print(f"Num embeddings:         {args.num_embeddings}")
     print(f"Num epochs:             {args.num_epochs}")
     print(f"Initial learning rate:  {args.initial_learning_rate}")
+    print(f"Batch size:             {args.batch_size}")
     print(
         "###################################################################################################"
     )
-
-    # Initialize tokenizer and model
-    print("Initializing tokenizer...")
-    tokenizer = fit_tokenizer(args.training_data)
-    print(f"Tokenizer initialized with vocab_size={tokenizer.vocab_size}")
-    model = ChessTransformer(
-        vocab_size=tokenizer.vocab_size,
-        n_positions=args.max_length,
-        n_embd=args.num_embeddings,
-    )
-
-    # Load and prepare data
-    print("Loading training/validation data...")
-    train_dataset = ChessDataset(
-        args.training_data, tokenizer, max_length=args.max_length
-    )
-    val_dataset = ChessDataset(args.val_data, tokenizer, max_length=args.max_length)
-
-    # Get the appropriate device
-    device = get_device()
-    print(f"Using device: {device}")
-
-    # Calculate random baseline loss
-    random_baseline_loss = calculate_random_baseline(
-        train_dataset, model.config.vocab_size, device
-    )
-    print(f"Random Baseline Loss: {random_baseline_loss:.4f}")
-
-    # Train the model
-    trained_model = train_model(
-        model,
-        train_dataset,
-        val_dataset,
-        num_epochs=args.num_epochs,
-        learning_rate=1e-3,
-        device=device,
-    )
-
-    # Save the trained model
-    output_file = open(args.output_file, "wb")
-    torch.save(trained_model.state_dict(), output_file)

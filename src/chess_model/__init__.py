@@ -1,4 +1,4 @@
-from .data import ChessDataset, ProgressiveDataset
+from .data import ChessDataset
 from .models import ChessTransformer
 from .training import calculate_random_baseline, fit_tokenizer, train_model
 from .utils import (
@@ -13,7 +13,6 @@ from .utils import (
 
 __all__ = [
     "ChessDataset",
-    "ProgressiveDataset",
     "ChessTransformer",
     "fit_tokenizer",
     "train_model",
