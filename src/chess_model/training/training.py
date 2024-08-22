@@ -30,9 +30,7 @@ def fit_tokenizer(csv_file):
 def train_model(model, train_dataset, val_dataset, num_epochs, learning_rate, device):
     model.to(device)
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
-    move_criterion = nn.CrossEntropyLoss()
-    checkmate_criterion = nn.BCEWithLogitsLoss()
-    outcome_criterion = nn.BCEWithLogitsLoss()
+    next_move_criterion = nn.CrossEntropyLoss()
 
     progressive_dataset = ProgressiveDataset(train_dataset)
     val_dataloader = DataLoader(val_dataset, batch_size=DATALOADER_BATCH_SIZE)
@@ -53,26 +51,18 @@ def train_model(model, train_dataset, val_dataset, num_epochs, learning_rate, de
             total=len(train_dataloader),
             desc=f"Epoch {epoch+1}/{num_epochs}",
             position=1,
-            leave=False,
         )
 
         for batch in train_dataloader:
             input_ids = batch["input_ids"].to(device)
-            move_labels = batch["labels"].to(device)
-            checkmate_labels = batch["is_checkmate"].to(device)
-            outcome_labels = batch["outcome"].to(device)
+            next_move_labels = batch["labels"].to(device)
+            # The dataset also has an `is_checkmate` label and `outcome` label,
+            # which we are currently not using.
 
             optimizer.zero_grad()
 
-            move_logits, checkmate_logits, outcome_logits = model(input_ids)
-
-            move_loss = move_criterion(move_logits, move_labels)
-            checkmate_loss = checkmate_criterion(
-                checkmate_logits.squeeze(), checkmate_labels
-            )
-            outcome_loss = outcome_criterion(outcome_logits, outcome_labels)
-
-            loss = move_loss + 0.1 * checkmate_loss + 0.1 * outcome_loss
+            next_move_logits = model(input_ids)
+            loss = next_move_criterion(next_move_logits, next_move_labels)
 
             loss.backward()
             optimizer.step()
@@ -86,25 +76,26 @@ def train_model(model, train_dataset, val_dataset, num_epochs, learning_rate, de
         avg_loss = total_loss / len(train_dataloader)
 
         # Validation
+        validation_progress_bar = tqdm(
+            total=len(val_dataloader),
+            desc="Validation",
+            position=2,
+        )
+
         model.eval()
         val_loss = 0
         with torch.no_grad():
             for batch in val_dataloader:
                 input_ids = batch["input_ids"].to(device)
-                move_labels = batch["labels"].to(device)
-                checkmate_labels = batch["is_checkmate"].to(device)
-                outcome_labels = batch["outcome"].to(device)
+                next_move_labels = batch["labels"].to(device)
 
-                move_logits, checkmate_logits, outcome_logits = model(input_ids)
+                next_move_logits = model(input_ids)
+                loss = next_move_criterion(next_move_logits, next_move_labels)
 
-                move_loss = move_criterion(move_logits, move_labels)
-                checkmate_loss = checkmate_criterion(
-                    checkmate_logits.squeeze(), checkmate_labels
-                )
-                outcome_loss = outcome_criterion(outcome_logits, outcome_labels)
-
-                loss = move_loss + 0.1 * checkmate_loss + 0.1 * outcome_loss
                 val_loss += loss.item()
+
+                validation_progress_bar.update(1)
+                validation_progress_bar.set_postfix({"loss": f"{loss.item():.4f}"})
 
         avg_val_loss = val_loss / len(val_dataloader)
 
@@ -130,27 +121,15 @@ def train_model(model, train_dataset, val_dataset, num_epochs, learning_rate, de
 
 def calculate_random_baseline(dataset, vocab_size, device):
     total_loss = 0
-    move_criterion = nn.CrossEntropyLoss()
-    checkmate_criterion = nn.BCEWithLogitsLoss()
-    outcome_criterion = nn.BCEWithLogitsLoss()
+    next_move_criterion = nn.CrossEntropyLoss()
     dataloader = DataLoader(dataset, batch_size=DATALOADER_BATCH_SIZE)
 
     for batch in tqdm(dataloader, desc="Calculating random baseline"):
         batch_size = batch["labels"].size(0)
 
-        random_move_logits = torch.rand(batch_size, vocab_size).to(device)
-        random_checkmate_logits = torch.rand(batch_size, 1).to(device)
-        random_outcome_logits = torch.rand(batch_size, 3).to(device)
+        random_next_move_logits = torch.rand(batch_size, vocab_size).to(device)
+        loss = next_move_criterion(random_next_move_logits, batch["labels"].to(device))
 
-        move_loss = move_criterion(random_move_logits, batch["labels"].to(device))
-        checkmate_loss = checkmate_criterion(
-            random_checkmate_logits.squeeze(), batch["is_checkmate"].to(device)
-        )
-        outcome_loss = outcome_criterion(
-            random_outcome_logits, batch["outcome"].to(device)
-        )
-
-        loss = move_loss + 0.1 * checkmate_loss + 0.1 * outcome_loss
         total_loss += loss.item()
 
     avg_loss = total_loss / len(dataloader)

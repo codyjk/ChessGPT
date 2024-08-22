@@ -16,17 +16,12 @@ class ChessTransformer(nn.Module):
         )
 
         self.transformer = GPT2Model(self.config)
-        self.move_head = nn.Linear(n_embd, vocab_size)
-        self.checkmate_head = nn.Linear(n_embd, 1)
-        self.outcome_head = nn.Linear(n_embd, 3)  # Win, Loss, Draw
+        self.next_move_head = nn.Linear(n_embd, vocab_size)
 
     def forward(self, input_ids, attention_mask=None):
         outputs = self.transformer(input_ids, attention_mask=attention_mask)
         hidden_states = outputs.last_hidden_state
         prediction_hidden_state = hidden_states[:, -1, :]
 
-        move_logits = self.move_head(prediction_hidden_state)
-        checkmate_logits = self.checkmate_head(prediction_hidden_state)
-        outcome_logits = self.outcome_head(prediction_hidden_state)
-
-        return move_logits, checkmate_logits, outcome_logits
+        next_move_logits = self.next_move_head(prediction_hidden_state)
+        return next_move_logits

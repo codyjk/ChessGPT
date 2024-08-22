@@ -15,6 +15,7 @@ DEFAULT_MAX_LENGTH = 50
 DEFAULT_NUM_EMBEDDINGS = 64
 DEFAULT_NUM_EPOCHS = 5
 DEFAULT_OUTPUT_FILE = "out/chess_transformer_model.pth"
+DEFAULT_INITIAL_LEARNING_RATE = 1e-3
 
 
 def main():
@@ -63,7 +64,29 @@ def main():
         required=False,
         default=DEFAULT_NUM_EPOCHS,
     )
+    parser.add_argument(
+        "--initial-learning-rate",
+        type=float,
+        help=f"The initial learning rate to use. Default: {DEFAULT_INITIAL_LEARNING_RATE}",
+        required=False,
+        default=DEFAULT_INITIAL_LEARNING_RATE,
+    )
     args = parser.parse_args()
+
+    print(
+        "###################################################################################################"
+    )
+    print("## Training model with args:")
+    print(f"Training data:          {args.training_data}")
+    print(f"Validation data:        {args.val_data}")
+    print(f"Output file:            {args.output_file}")
+    print(f"Max length:             {args.max_length}")
+    print(f"Num embeddings:         {args.num_embeddings}")
+    print(f"Num epochs:             {args.num_epochs}")
+    print(f"Initial learning rate:  {args.initial_learning_rate}")
+    print(
+        "###################################################################################################"
+    )
 
     # Initialize tokenizer and model
     print("Initializing tokenizer...")
