@@ -51,6 +51,7 @@ def train_model(model, train_dataset, val_dataset, num_epochs, learning_rate, de
             total=len(train_dataloader),
             desc=f"Epoch {epoch+1}/{num_epochs}",
             position=1,
+            leave=False,
         )
 
         for batch in train_dataloader:
@@ -80,6 +81,7 @@ def train_model(model, train_dataset, val_dataset, num_epochs, learning_rate, de
             total=len(val_dataloader),
             desc="Validation",
             position=2,
+            leave=False,
         )
 
         model.eval()
