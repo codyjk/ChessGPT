@@ -13,11 +13,12 @@ from chess_model import (
 )
 
 DEFAULT_MAX_LENGTH = 10
-DEFAULT_NUM_EMBEDDINGS = 128
+DEFAULT_NUM_EMBEDDINGS = 256
 DEFAULT_NUM_EPOCHS = 5
 DEFAULT_OUTPUT_FILE = "out/chess_transformer_model.pth"
 DEFAULT_INITIAL_LEARNING_RATE = 1e-3
 DEFAULT_BATCH_SIZE = 128
+# TODO(cjk): Parametereize n_layer, n_head
 
 
 def main():

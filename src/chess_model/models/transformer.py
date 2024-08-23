@@ -4,7 +4,7 @@ from transformers import GPT2Config, GPT2Model
 
 class ChessTransformer(nn.Module):
     # The defaults here are a relatively small and easy-to-train model
-    def __init__(self, vocab_size, n_positions=10, n_embd=128, n_layer=2, n_head=2):
+    def __init__(self, vocab_size, n_positions=10, n_embd=256, n_layer=4, n_head=4):
         super(ChessTransformer, self).__init__()
 
         self.config = GPT2Config(
