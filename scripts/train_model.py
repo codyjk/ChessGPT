@@ -20,6 +20,7 @@ DEFAULT_INITIAL_LEARNING_RATE = 1e-3
 DEFAULT_BATCH_SIZE = 128
 DEFAULT_NUM_LAYERS = 4
 DEFAULT_NUM_HEADS = 4
+DEFAULT_SHOW_RANDOM_BASELINE = True
 
 
 def main():
@@ -61,11 +62,12 @@ def main():
     device = get_device()
     print(f"Using device: {device}")
 
-    # Calculate random baseline loss
-    random_baseline_loss = calculate_random_baseline(
-        train_dataloader, model.config.vocab_size, device
-    )
-    print(f"Random Baseline Loss: {random_baseline_loss:.4f}")
+    # Calculate random baseline loss (if requested)
+    if args.show_random_baseline:
+        random_baseline_loss = calculate_random_baseline(
+            train_dataloader, model.config.vocab_size, device
+        )
+        print(f"Random Baseline Loss: {random_baseline_loss:.4f}")
 
     # Train the model
     trained_model = train_model(
@@ -158,6 +160,13 @@ def build_arg_parser():
         help="The state dict file to load the initial model from. If not provided, the model will be randomly initialized.",
         required=False,
         default=None,
+    )
+    parser.add_argument(
+        "--show-random-baseline",
+        type=bool,
+        help="Whether to show the random baseline loss. Default: True",
+        required=False,
+        default=DEFAULT_SHOW_RANDOM_BASELINE,
     )
 
     return parser
