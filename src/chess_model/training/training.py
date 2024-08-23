@@ -1,3 +1,4 @@
+import copy
 import random
 
 import torch
@@ -28,7 +29,15 @@ def train_model(
 ):
     model.to(device)
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.1, patience=2
+    )
     next_move_criterion = nn.CrossEntropyLoss()
+
+    best_val_loss = float("inf")
+    best_model = None
+    patience = 5
+    patience_counter = 0
 
     total_steps = num_epochs * len(train_dataloader)
     progress_bar = tqdm(total=total_steps, desc="Training Progress")
@@ -47,6 +56,7 @@ def train_model(
             loss = next_move_criterion(next_move_logits, next_move_labels)
 
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
             total_loss += loss.item()
@@ -71,13 +81,28 @@ def train_model(
                 val_loss += loss.item()
 
         avg_val_loss = val_loss / len(val_dataloader)
+        scheduler.step(avg_val_loss)
+
+        # Get current learning rate
+        current_lr = optimizer.param_groups[0]["lr"]
 
         print(
-            f"\nEpoch {epoch+1}/{num_epochs}, Train Loss: {avg_loss:.4f}, Val Loss: {avg_val_loss:.4f}"
+            f"\nEpoch {epoch+1}/{num_epochs}, Train Loss: {avg_loss:.4f}, Val Loss: {avg_val_loss:.4f}, Learning Rate: {current_lr:.6f}"
         )
 
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            best_model = copy.deepcopy(model)
+            patience_counter = 0
+        else:
+            patience_counter += 1
+
+        if patience_counter >= patience:
+            print("Early stopping triggered")
+            break
+
     progress_bar.close()
-    return model
+    return best_model
 
 
 def calculate_random_baseline(dataloader, vocab_size, device):
