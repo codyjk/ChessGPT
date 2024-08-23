@@ -43,6 +43,10 @@ def main():
         n_head=args.num_heads,
     )
 
+    if args.state_dict_file:
+        print(f"Initializing model from {args.state_dict_file}...")
+        model.load_state_dict(torch.load(args.state_dict_file))
+
     # Load and prepare data
     print("Loading training/validation data...")
     train_dataset = ChessDataset(
@@ -148,6 +152,13 @@ def build_arg_parser():
         required=False,
         default=DEFAULT_NUM_HEADS,
     )
+    parser.add_argument(
+        "--state-dict-file",
+        type=str,
+        help="The state dict file to load the initial model from. If not provided, the model will be randomly initialized.",
+        required=False,
+        default=None,
+    )
 
     return parser
 
@@ -160,6 +171,7 @@ def print_training_header(args):
     print(f"Training data:          {args.training_data}")
     print(f"Validation data:        {args.val_data}")
     print(f"Output file:            {args.output_file}")
+    print(f"State dict file:        {args.state_dict_file}")
     print(f"Max length:             {args.max_length}")
     print(f"Num embeddings:         {args.num_embeddings}")
     print(f"Num layers:             {args.num_layers}")
