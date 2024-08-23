@@ -1,10 +1,8 @@
 import copy
-import random
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from chess_model.utils.tokenizer import ChessTokenizer
