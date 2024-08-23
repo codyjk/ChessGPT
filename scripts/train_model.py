@@ -14,11 +14,12 @@ from chess_model import (
 
 DEFAULT_MAX_LENGTH = 10
 DEFAULT_NUM_EMBEDDINGS = 256
-DEFAULT_NUM_EPOCHS = 5
+DEFAULT_NUM_EPOCHS = 10
 DEFAULT_OUTPUT_FILE = "out/chess_transformer_model.pth"
 DEFAULT_INITIAL_LEARNING_RATE = 1e-3
 DEFAULT_BATCH_SIZE = 128
-# TODO(cjk): Parametereize n_layer, n_head
+DEFAULT_NUM_LAYERS = 4
+DEFAULT_NUM_HEADS = 4
 
 
 def main():
@@ -38,6 +39,8 @@ def main():
         vocab_size=tokenizer.vocab_size,
         n_positions=args.max_length,
         n_embd=args.num_embeddings,
+        n_layer=args.num_layers,
+        n_head=args.num_heads,
     )
 
     # Load and prepare data
@@ -131,6 +134,20 @@ def build_arg_parser():
         required=False,
         default=DEFAULT_BATCH_SIZE,
     )
+    parser.add_argument(
+        "--num-layers",
+        type=int,
+        help=f"The number of layers to use in the model. Default: {DEFAULT_NUM_LAYERS}",
+        required=False,
+        default=DEFAULT_NUM_LAYERS,
+    )
+    parser.add_argument(
+        "--num-heads",
+        type=int,
+        help=f"The number of heads to use in the model. Default: {DEFAULT_NUM_HEADS}",
+        required=False,
+        default=DEFAULT_NUM_HEADS,
+    )
 
     return parser
 
@@ -145,7 +162,9 @@ def print_training_header(args):
     print(f"Output file:            {args.output_file}")
     print(f"Max length:             {args.max_length}")
     print(f"Num embeddings:         {args.num_embeddings}")
-    print(f"Num epochs:             {args.num_epochs}")
+    print(f"Num layers:             {args.num_layers}")
+    print(f"Num heads:              {args.num_heads}")
+    print(f"Num training epochs:    {args.num_epochs}")
     print(f"Initial learning rate:  {args.initial_learning_rate}")
     print(f"Batch size:             {args.batch_size}")
     print(
