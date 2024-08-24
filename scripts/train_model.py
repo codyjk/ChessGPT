@@ -55,7 +55,9 @@ def main():
     )
     val_dataset = ChessDataset(args.val_data, tokenizer, max_length=args.max_length)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size)
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=True
+    )
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
 
     # Get the appropriate device
