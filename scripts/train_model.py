@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 
 from chess_model import (
     ChessDataset,
+    ChessTokenizer,
     ChessTransformer,
     calculate_random_baseline,
     get_device,
