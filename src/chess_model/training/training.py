@@ -18,9 +18,9 @@ def fit_tokenizer(csv_file):
 
             context, next_move, _is_checkmate, _outcome = row.split(",")
             context = context.strip().split()
+            unique_moves.add(next_move)
             for move in context:
                 unique_moves.add(move)
-                unique_moves.add(next_move)
 
     tokenizer = ChessTokenizer()
     tokenizer.fit(list(unique_moves))
