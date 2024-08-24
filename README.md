@@ -25,7 +25,7 @@ e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5 f3 e6 c3 Nf6 Bd3 Nbd7 Ne2 Be7 O-O O-O N2g3 Bg6 Qc2
 
 [Lichess](https://database.lichess.org) provides an open database of nearly 6B games in PGN format. Use the `reduce-pgn` script to transform one (or all) of these PGN files into the format described above. You can optionally segment the games by changing the `DIRECTORY_TO_ELO_RATING_RANGE` map in `scripts/reduce_pgn_to_moves.py`.
 
-```
+```console
 $ poetry run reduce-pgn --help
 usage: reduce-pgn [-h] --input-pgn INPUT_PGN --output-dir OUTPUT_DIR
 
@@ -41,7 +41,7 @@ options:
 
 The default configuration for ELO ranges yields the following:
 
-```sh
+```console
 $ poetry run reduce-pgn --input-pgn data/lichess_db_standard_rated_2024-06.pgn --output-dir out
 Processing file...
 Processed 1116435 games in beginner.
@@ -62,8 +62,8 @@ g3 Nc6 Bg2 b6 Nf3 Bb7 O-O g6 d4 Bg7 c4 d6 Nc3 e6 e4 Nge7 Re1 O-O Be3 d5 cxd5 exd
 
 Once the games have been reduced to the format described above, you can use the `prepare-training-data` script to generate training and validation data sets.
 
-```sh
-❯ poetry run prepare-training-data --help
+```console
+$ poetry run prepare-training-data --help
 usage: prepare-training-data [-h] --input-file INPUT_FILE --output-dir
                              OUTPUT_DIR
                              [--max-context-length MAX_CONTEXT_LENGTH]
@@ -88,7 +88,7 @@ options:
 
 Depending on the file size, this may take a while, but you will see the progress as the script runs:
 
-```
+```console
 $ poetry run prepare-training-data --input-file out/grandmaster.txt --output-dir out
 Processing games:  17%|██████████████▌                                       | 18605/111121 [00:06<00:32, 2873.69it/s]
 ```
@@ -97,7 +97,7 @@ Processing games:  17%|██████████████▌            
 
 After preparing the training data, use the `fit-and-save-tokenizer` script to fit the tokenizer to the training data. Pre-generating the tokenizer guarantees that the same tokenization is used when training and running the model.
 
-```sh
+```console
 $ poetry run fit-and-save-tokenizer --help
 usage: fit-and-save-tokenizer [-h] --training-data TRAINING_DATA
                               [--tokenizer-output-file TOKENIZER_OUTPUT_FILE]
@@ -113,12 +113,21 @@ options:
                         Where to save tokenizer state. Default: out/chess_tokenizer.json
 ```
 
+For example:
+
+```console
+$ poetry run fit-and-save-tokenizer --training-data out/training-data.csv
+Fitting tokenizer...
+Tokenizer initialized with vocab_size=1482
+Tokenizer saved to: out/chess_tokenizer.json
+```
+
 #### Training the model
 
 After preparing the training data and validation data sets using `prepare-training-data`, the `train` command will train the model with the given hyperparameters, and save the resulting model to a `.pth` file.
 
 
-```sh
+```console
 $ poetry run train --help
 usage: train [-h] --training-data TRAINING_DATA --val-data VAL_DATA
              [--model-output-file MODEL_OUTPUT_FILE] [--max-length MAX_LENGTH]
@@ -166,8 +175,7 @@ options:
 
 Here's an example with a small model and dataset:
 
-```sh
-
+```console
 $ poetry run train --training-data out/training-data.csv --val-data out/validation-data.csv --max-length 5 --num-embeddings 64 --num-epochs 3 --batch-size 32 --num-layers 1 --num-heads 1
 ###################################################################################################
 ## Training model with args:
