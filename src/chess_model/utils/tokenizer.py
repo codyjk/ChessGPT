@@ -1,5 +1,7 @@
 import json
 
+from tqdm import tqdm
+
 PAD_TOKEN = "[PAD]"
 UNK_TOKEN = "[UNK]"
 
@@ -47,13 +49,14 @@ class ChessTokenizer:
     @classmethod
     def fit(cls, csv_file):
         unique_moves = set()
-        with open(csv_file, "r") as data:
-            for row_number, row in enumerate(data):
-                if row_number == 0:
-                    # Skip header
-                    continue
 
-                context, next_move, _is_checkmate, _outcome = row.split(",")
+        # Count total lines for progress bar
+        total_lines = sum(1 for _ in open(csv_file, "r"))
+
+        with open(csv_file, "r") as data:
+            # Use tqdm to create a progress bar
+            for row in tqdm(data, total=total_lines, desc="Processing moves"):
+                context, next_move, _is_checkmate, _outcome = row.strip().split(",")
                 context = context.strip().split()
                 unique_moves.add(next_move)
                 for move in context:
