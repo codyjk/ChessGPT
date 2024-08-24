@@ -8,25 +8,6 @@ from tqdm import tqdm
 from chess_model.utils.tokenizer import ChessTokenizer
 
 
-def fit_tokenizer(csv_file):
-    unique_moves = set()
-    with open(csv_file, "r") as data:
-        for row_number, row in enumerate(data):
-            if row_number == 0:
-                # Skip header
-                continue
-
-            context, next_move, _is_checkmate, _outcome = row.split(",")
-            context = context.strip().split()
-            unique_moves.add(next_move)
-            for move in context:
-                unique_moves.add(move)
-
-    tokenizer = ChessTokenizer()
-    tokenizer.fit(list(unique_moves))
-    return tokenizer
-
-
 def train_model(
     model, train_dataloader, val_dataloader, num_epochs, learning_rate, device
 ):
