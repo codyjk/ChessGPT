@@ -118,7 +118,8 @@ For example:
 ```console
 $ poetry run fit-and-save-tokenizer --training-data out/training-data.csv
 Fitting tokenizer...
-Processing moves: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1783171/1783171 [00:01<00:00, 901430.89it/s]
+Counting lines: 76.5MB [00:00, 1.67GB/s]
+Processing moves: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1783171/1783171 [00:01<00:00, 944200.49it/s]
 Tokenizer initialized with vocab_size=1484
 Tokenizer saved to: out/chess_tokenizer.json
 ```

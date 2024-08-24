@@ -1,4 +1,6 @@
 import json
+import mmap
+import os
 
 from tqdm import tqdm
 
@@ -50,11 +52,10 @@ class ChessTokenizer:
     def fit(cls, csv_file):
         unique_moves = set()
 
-        # Count total lines for progress bar
-        total_lines = sum(1 for _ in open(csv_file, "r"))
+        # Count total lines so we can show progress in the actual fit step
+        total_lines = count_lines_fast(csv_file)
 
         with open(csv_file, "r") as data:
-            # Use tqdm to create a progress bar
             for row in tqdm(data, total=total_lines, desc="Processing moves"):
                 context, next_move, _is_checkmate, _outcome = row.strip().split(",")
                 context = context.strip().split()
@@ -70,3 +71,29 @@ class ChessTokenizer:
                 tokenizer.id_to_move[tokenizer.vocab_size] = move
                 tokenizer.vocab_size += 1
         return tokenizer
+
+
+def count_lines_fast(filename):
+    """
+    Count lines in a file quickly using mmap. For very large training data sets,
+    we want to be able to show progress as each line is read. To show progress,
+    we need to know the line count, which itself is time consuming to determine.
+
+    This function uses mmap to count the number of lines in a file, which is
+    much faster than counting the lines using the built-in count() function.
+    """
+    f = open(filename, "r+")
+    buf = mmap.mmap(f.fileno(), 0)
+    lines = 0
+    read_size = 1024 * 1024
+    file_size = os.path.getsize(filename)
+
+    with tqdm(
+        total=file_size, unit="B", unit_scale=True, desc="Counting lines"
+    ) as pbar:
+        while buf.tell() < file_size:
+            lines += buf.read(read_size).count(b"\n")
+            pbar.update(read_size)
+
+    f.close()
+    return lines
