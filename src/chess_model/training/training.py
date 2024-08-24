@@ -11,7 +11,11 @@ from chess_model.utils.tokenizer import ChessTokenizer
 def fit_tokenizer(csv_file):
     unique_moves = set()
     with open(csv_file, "r") as data:
-        for row in data:
+        for row_number, row in enumerate(data):
+            if row_number == 0:
+                # Skip header
+                continue
+
             context, _next_move, _is_checkmate, _outcome = row.split(",")
             context = context.strip().split()
             for move in context:
