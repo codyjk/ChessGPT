@@ -146,7 +146,8 @@ $ poetry run train --training-data out/training-data.csv --val-data out/validati
 ## Training model with args:
 Training data:          out/training-data.csv
 Validation data:        out/validation-data.csv
-Output file:            out/chess_transformer_model.pth
+Model output file:      out/chess_transformer_model.pth
+Tokenizer output file:  out/chess_tokenizer.json
 State dict file:        None
 Max length:             5
 Num embeddings:         64
