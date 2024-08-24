@@ -4,12 +4,12 @@ import random
 from tqdm import tqdm
 
 
-def process_game(game):
+def process_game(game, max_length):
     moves = game.split()
     outcome = moves[-1]
     moves = moves[:-1]  # Remove the outcome from the move list
 
-    for i in range(len(moves)):
+    for i in range(min(len(moves), max_length)):
         context = " ".join(moves[:i])
         next_move = moves[i]
         is_checkmate = "1" if next_move.endswith("#") else "0"
@@ -40,17 +40,12 @@ def prepare_training_data(
         with open(input_file, "r") as infile:
             for line in tqdm(infile, total=total_lines, desc="Processing games"):
                 game = line.strip()
-                for context, next_move, is_checkmate, outcome in process_game(game):
-                    # Limit context to last `max_context_length` moves
-                    context_moves = context.split()[-max_context_length:]
-                    limited_context = " ".join(context_moves)
-
+                for context, next_move, is_checkmate, outcome in process_game(
+                    game, max_context_length
+                ):
                     # Decide whether to write to train or val file
+                    row = [context, next_move, is_checkmate, outcome]
                     if random.random() < val_split:
-                        val_writer.writerow(
-                            [limited_context, next_move, is_checkmate, outcome]
-                        )
+                        val_writer.writerow(row)
                     else:
-                        train_writer.writerow(
-                            [limited_context, next_move, is_checkmate, outcome]
-                        )
+                        train_writer.writerow(row)
