@@ -16,10 +16,11 @@ def fit_tokenizer(csv_file):
                 # Skip header
                 continue
 
-            context, _next_move, _is_checkmate, _outcome = row.split(",")
+            context, next_move, _is_checkmate, _outcome = row.split(",")
             context = context.strip().split()
             for move in context:
                 unique_moves.add(move)
+                unique_moves.add(next_move)
 
     tokenizer = ChessTokenizer()
     tokenizer.fit(list(unique_moves))
