@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import torch
 from torch.utils.data import DataLoader
@@ -15,7 +16,8 @@ from chess_model import (
 DEFAULT_MAX_LENGTH = 10
 DEFAULT_NUM_EMBEDDINGS = 256
 DEFAULT_NUM_EPOCHS = 10
-DEFAULT_OUTPUT_FILE = "out/chess_transformer_model.pth"
+DEFAULT_MODEL_OUTPUT_FILE = "out/chess_transformer_model.pth"
+DEFAULT_TOKENIZER_OUTPUT_FILE = "out/chess_tokenizer.json"
 DEFAULT_INITIAL_LEARNING_RATE = 1e-3
 DEFAULT_BATCH_SIZE = 128
 DEFAULT_NUM_LAYERS = 4
@@ -81,9 +83,12 @@ def main():
         device=device,
     )
 
-    # Save the trained model
-    output_file = open(args.output_file, "wb")
-    torch.save(trained_model.state_dict(), output_file)
+    # Save the trained model and tokenizer
+    torch.save(trained_model.state_dict(), args.model_output_file)
+    tokenizer.save(args.tokenizer_output_file)
+
+    print(f"Model saved to: {args.model_output_file}")
+    print(f"Tokenizer saved to: {args.tokenizer_output_file}")
 
 
 def build_arg_parser():
@@ -101,11 +106,11 @@ def build_arg_parser():
         required=True,
     )
     parser.add_argument(
-        "--output-file",
+        "--model-output-file",
         type=str,
-        help=f"Where to save the pickle file for the trained model. Default: {DEFAULT_OUTPUT_FILE}",
+        help=f"Where to save the pickle file for the trained model. Default: {DEFAULT_MODEL_OUTPUT_FILE}",
         required=False,
-        default=DEFAULT_OUTPUT_FILE,
+        default=DEFAULT_MODEL_OUTPUT_FILE,
     )
     parser.add_argument(
         "--max-length",
@@ -170,6 +175,13 @@ def build_arg_parser():
         required=False,
         default=DEFAULT_SHOW_RANDOM_BASELINE,
     )
+    parser.add_argument(
+        "--tokenizer-output-file",
+        type=str,
+        help=f"Where to save tokenizer state. Default: {DEFAULT_TOKENIZER_OUTPUT_FILE}",
+        required=False,
+        default=DEFAULT_TOKENIZER_OUTPUT_FILE,
+    )
 
     return parser
 
@@ -181,7 +193,7 @@ def print_training_header(args):
     print("## Training model with args:")
     print(f"Training data:          {args.training_data}")
     print(f"Validation data:        {args.val_data}")
-    print(f"Output file:            {args.output_file}")
+    print(f"Model output file:      {args.output_file}")
     print(f"State dict file:        {args.state_dict_file}")
     print(f"Max length:             {args.max_length}")
     print(f"Num embeddings:         {args.num_embeddings}")

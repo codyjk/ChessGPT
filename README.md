@@ -100,52 +100,41 @@ After preparing the training data and validation data sets using `prepare-traini
 
 ```sh
 $ poetry run train --help
-usage: train [-h] --training-data TRAINING_DATA --val-data VAL_DATA
-             [--output-file OUTPUT_FILE] [--max-length MAX_LENGTH]
-             [--num-embeddings NUM_EMBEDDINGS] [--num-epochs NUM_EPOCHS]
-             [--initial-learning-rate INITIAL_LEARNING_RATE]
-             [--batch-size BATCH_SIZE] [--num-layers NUM_LAYERS]
-             [--num-heads NUM_HEADS] [--state-dict-file STATE_DICT_FILE]
-             [--show-random-baseline SHOW_RANDOM_BASELINE]
+usage: train [-h] --training-data TRAINING_DATA --val-data VAL_DATA [--model-output-file MODEL_OUTPUT_FILE] [--max-length MAX_LENGTH]
+             [--num-embeddings NUM_EMBEDDINGS] [--num-epochs NUM_EPOCHS] [--initial-learning-rate INITIAL_LEARNING_RATE]
+             [--batch-size BATCH_SIZE] [--num-layers NUM_LAYERS] [--num-heads NUM_HEADS] [--state-dict-file STATE_DICT_FILE]
+             [--show-random-baseline SHOW_RANDOM_BASELINE] [--tokenizer-output-file TOKENIZER_OUTPUT_FILE]
 
 Train the LLM.
 
 options:
   -h, --help            show this help message and exit
   --training-data TRAINING_DATA
-                        The input training data file, as returned by
-                        `poetry run prepare-training-data`
-  --val-data VAL_DATA   The input validation data file, as returned by
-                        `poetry run prepare-training-data`
-  --output-file OUTPUT_FILE
-                        Where to save the pickle file for the trained
-                        model. Default: out/chess_transformer_model.pth
+                        The input training data file, as returned by `poetry run prepare-training-data`
+  --val-data VAL_DATA   The input validation data file, as returned by `poetry run prepare-training-data`
+  --model-output-file MODEL_OUTPUT_FILE
+                        Where to save the pickle file for the trained model. Default: out/chess_transformer_model.pth
   --max-length MAX_LENGTH
-                        The maximum context length (number of moves) to
-                        train against. Default: 10
+                        The maximum context length (number of moves) to train against. Default: 10
   --num-embeddings NUM_EMBEDDINGS
-                        The number of embeddings to use in the model.
-                        Default: 256
+                        The number of embeddings to use in the model. Default: 256
   --num-epochs NUM_EPOCHS
-                        The number of epochs to train the model for.
-                        Default: 10
+                        The number of epochs to train the model for. Default: 10
   --initial-learning-rate INITIAL_LEARNING_RATE
                         The initial learning rate to use. Default: 0.001
   --batch-size BATCH_SIZE
                         The batch size to use. Default: 128
   --num-layers NUM_LAYERS
-                        The number of layers to use in the model.
-                        Default: 4
+                        The number of layers to use in the model. Default: 4
   --num-heads NUM_HEADS
-                        The number of heads to use in the model. Default:
-                        4
+                        The number of heads to use in the model. Default: 4
   --state-dict-file STATE_DICT_FILE
-                        The state dict file to load the initial model
-                        from. If not provided, the model will be randomly
-                        initialized.
+                        The state dict file to load the initial model from. If not provided, the model will be randomly initialized.
   --show-random-baseline SHOW_RANDOM_BASELINE
-                        Whether to show the random baseline loss.
-                        Default: True
+                        Whether to show the random baseline loss. Default: True
+  --tokenizer-output-file TOKENIZER_OUTPUT_FILE
+                        Where to save tokenizer state. Default: out/chess_tokenizer.json
+
 ```
 
 Here's an example with a small model and dataset:

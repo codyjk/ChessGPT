@@ -1,3 +1,5 @@
+import json
+
 PAD_TOKEN = "[PAD]"
 UNK_TOKEN = "[UNK]"
 
@@ -24,3 +26,27 @@ class ChessTokenizer:
 
     def decode(self, ids):
         return [self.id_to_move.get(id, UNK_TOKEN) for id in ids]
+
+    def save(self, file_path):
+        """Save the tokenizer state to a JSON file."""
+        state = {
+            "move_to_id": self.move_to_id,
+            "id_to_move": {
+                int(k): v for k, v in self.id_to_move.items()
+            },  # Ensure keys are serializable
+            "vocab_size": self.vocab_size,
+        }
+        with open(file_path, "w") as f:
+            json.dump(state, f)
+
+    @classmethod
+    def load(cls, file_path):
+        """Load the tokenizer state from a JSON file."""
+        with open(file_path, "r") as f:
+            state = json.load(f)
+
+        tokenizer = cls()
+        tokenizer.move_to_id = state["move_to_id"]
+        tokenizer.id_to_move = {int(k): v for k, v in state["id_to_move"].items()}
+        tokenizer.vocab_size = state["vocab_size"]
+        return tokenizer
