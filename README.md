@@ -63,8 +63,10 @@ g3 Nc6 Bg2 b6 Nf3 Bb7 O-O g6 d4 Bg7 c4 d6 Nc3 e6 e4 Nge7 Re1 O-O Be3 d5 cxd5 exd
 Once the games have been reduced to the format described above, you can use the `prepare-training-data` script to generate training and validation data sets.
 
 ```sh
-$ poetry run prepare-training-data -h
-usage: prepare-training-data [-h] --input-file INPUT_FILE --output-dir OUTPUT_DIR [--max-context-length MAX_CONTEXT_LENGTH]
+❯ poetry run prepare-training-data --help
+usage: prepare-training-data [-h] --input-file INPUT_FILE --output-dir
+                             OUTPUT_DIR
+                             [--max-context-length MAX_CONTEXT_LENGTH]
                              [--validation-split VALIDATION_SPLIT]
 
 Prepare training data for the model.
@@ -76,10 +78,13 @@ options:
   --output-dir OUTPUT_DIR
                         The output directory.
   --max-context-length MAX_CONTEXT_LENGTH
-                        The maximum number of moves to include in the context. Default: 50
+                        The maximum number of moves to include in the
+                        context. Default: 50
   --validation-split VALIDATION_SPLIT
-                        The proportion of the data to use for validation. Default: 0.1
+                        The proportion of the data to use for validation.
+                        Default: 0.1
 ```
+
 
 Depending on the file size, this may take a while, but you will see the progress as the script runs:
 
@@ -87,3 +92,114 @@ Depending on the file size, this may take a while, but you will see the progress
 $ poetry run prepare-training-data --input-file out/grandmaster.txt --output-dir out
 Processing games:  17%|██████████████▌                                       | 18605/111121 [00:06<00:32, 2873.69it/s]
 ```
+
+#### Training the model
+
+After preparing the training data and validation data sets using `prepare-training-data`, the `train` command will train the model with the given hyperparameters, and save the resulting model to a `.pth` file.
+
+
+```sh
+$ poetry run train --help
+usage: train [-h] --training-data TRAINING_DATA --val-data VAL_DATA
+             [--output-file OUTPUT_FILE] [--max-length MAX_LENGTH]
+             [--num-embeddings NUM_EMBEDDINGS] [--num-epochs NUM_EPOCHS]
+             [--initial-learning-rate INITIAL_LEARNING_RATE]
+             [--batch-size BATCH_SIZE] [--num-layers NUM_LAYERS]
+             [--num-heads NUM_HEADS] [--state-dict-file STATE_DICT_FILE]
+             [--show-random-baseline SHOW_RANDOM_BASELINE]
+
+Train the LLM.
+
+options:
+  -h, --help            show this help message and exit
+  --training-data TRAINING_DATA
+                        The input training data file, as returned by
+                        `poetry run prepare-training-data`
+  --val-data VAL_DATA   The input validation data file, as returned by
+                        `poetry run prepare-training-data`
+  --output-file OUTPUT_FILE
+                        Where to save the pickle file for the trained
+                        model. Default: out/chess_transformer_model.pth
+  --max-length MAX_LENGTH
+                        The maximum context length (number of moves) to
+                        train against. Default: 10
+  --num-embeddings NUM_EMBEDDINGS
+                        The number of embeddings to use in the model.
+                        Default: 256
+  --num-epochs NUM_EPOCHS
+                        The number of epochs to train the model for.
+                        Default: 10
+  --initial-learning-rate INITIAL_LEARNING_RATE
+                        The initial learning rate to use. Default: 0.001
+  --batch-size BATCH_SIZE
+                        The batch size to use. Default: 128
+  --num-layers NUM_LAYERS
+                        The number of layers to use in the model.
+                        Default: 4
+  --num-heads NUM_HEADS
+                        The number of heads to use in the model. Default:
+                        4
+  --state-dict-file STATE_DICT_FILE
+                        The state dict file to load the initial model
+                        from. If not provided, the model will be randomly
+                        initialized.
+  --show-random-baseline SHOW_RANDOM_BASELINE
+                        Whether to show the random baseline loss.
+                        Default: True
+```
+
+Here's an example with a small model and dataset:
+
+```sh
+
+$ poetry run train --training-data out/training-data.csv --val-data out/validation-data.csv --max-length 5 --num-embeddings 64 --num-epochs 3 --batch-size 32 --num-layers 1 --num-heads 1
+###################################################################################################
+## Training model with args:
+Training data:          out/training-data.csv
+Validation data:        out/validation-data.csv
+Output file:            out/chess_transformer_model.pth
+State dict file:        None
+Max length:             5
+Num embeddings:         64
+Num layers:             1
+Num heads:              1
+Num training epochs:    3
+Initial learning rate:  0.001
+Batch size:             32
+###################################################################################################
+Initializing tokenizer...
+Tokenizer initialized with vocab_size=193
+Loading training/validation data...
+Using device: mps
+Calculating random baseline: 100%|██████████████████████████████████████████████████████████████████████████████| 14032/14032 [00:20<00:00, 682.72it/s]
+Random Baseline Loss: 5.3037
+Training Progress:  33%|██████████████████████▎                                            | 14032/42096 [02:48<05:37, 83.26it/s, epoch=1, loss=1.7427]
+Epoch 1/3, Train Loss: 1.8611, Val Loss: 1.7220, Learning Rate: 0.001000
+Training Progress:  67%|████████████████████████████████████████████▋                      | 28064/42096 [05:42<02:41, 86.96it/s, epoch=2, loss=1.4041]
+Epoch 2/3, Train Loss: 1.7614, Val Loss: 1.6953, Learning Rate: 0.001000
+Training Progress: 100%|███████████████████████████████████████████████████████████████████| 42096/42096 [08:33<00:00, 84.85it/s, epoch=3, loss=2.1762]
+Epoch 3/3, Train Loss: 1.7385, Val Loss: 1.6752, Learning Rate: 0.001000
+Training Progress: 100%|███████████████████████████████████████████████████████████████████| 42096/42096 [08:38<00:00, 81.17it/s, epoch=3, loss=2.1762]
+```
+
+### Validating that the model actually works
+
+A quick way to validate that the model works is to use a small dataset of ~100,000 games with small hyperperameters, like the example shown above.
+
+For convenience, here are the steps:
+
+```sh
+# Reduce the PGN
+poetry run reduce-pgn --input-pgn data/lichess_db_standard_rated_2024-06.pgn --output-dir out
+
+# Take a subset of the games
+shuf -n 100000 out/master.txt > out/master-trunc.txt
+
+# Prepare the training data
+poetry run prepare-training-data --input-file out/master-trunc.txt --output-dir out --max-length 5
+
+# Train the model. Make sure to use the same context-length as above
+poetry run train --training-data out/training-data.csv --val-data out/validation-data.csv --max-length 5 --num-embeddings 64 --num-epochs 3 --batch-size 32 --num-layers 1 --num-heads 1
+```
+
+Then, open the `run_trained_model.ipynb` notebook to explore the model. Make sure the hyperparameters at the top match the ones used above.

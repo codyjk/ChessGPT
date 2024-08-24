@@ -21,9 +21,7 @@ def process_game(game, max_length):
             yield context, next_move, is_checkmate, ""
 
 
-def prepare_training_data(
-    input_file, train_file, val_file, max_context_length, val_split
-):
+def prepare_training_data(input_file, train_file, val_file, max_length, val_split):
     with open(train_file, "w", newline="") as train_outfile, open(
         val_file, "w", newline=""
     ) as val_outfile:
@@ -41,7 +39,7 @@ def prepare_training_data(
             for line in tqdm(infile, total=total_lines, desc="Processing games"):
                 game = line.strip()
                 for context, next_move, is_checkmate, outcome in process_game(
-                    game, max_context_length
+                    game, max_length
                 ):
                     # Decide whether to write to train or val file
                     row = [context, next_move, is_checkmate, outcome]
