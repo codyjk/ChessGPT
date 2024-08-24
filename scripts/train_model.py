@@ -12,7 +12,7 @@ from chess_model import (
     train_model,
 )
 
-DEFAULT_MAX_LENGTH = 10
+DEFAULT_MAX_LENGTH = 50
 DEFAULT_NUM_EMBEDDINGS = 256
 DEFAULT_NUM_EPOCHS = 10
 DEFAULT_MODEL_OUTPUT_FILE = "out/chess_transformer_model.pth"

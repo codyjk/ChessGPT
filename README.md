@@ -115,7 +115,7 @@ options:
   --model-output-file MODEL_OUTPUT_FILE
                         Where to save the pickle file for the trained model. Default: out/chess_transformer_model.pth
   --max-length MAX_LENGTH
-                        The maximum context length (number of moves) to train against. Default: 10
+                        The maximum context length (number of moves) to train against. Default: 50
   --num-embeddings NUM_EMBEDDINGS
                         The number of embeddings to use in the model. Default: 256
   --num-epochs NUM_EPOCHS
