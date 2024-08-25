@@ -226,7 +226,7 @@ shuf -n 100000 out/master.txt > out/master-trunc.txt
 poetry run prepare-training-data --input-file out/master-trunc.txt --output-dir out --max-length 5
 
 # Train the model. Make sure to use the same context-length as above
-poetry run train --training-data out/training-data.csv --val-data out/validation-data.csv --max-length 5 --num-embeddings 64 --num-epochs 3 --batch-size 32 --num-layers 1 --num-heads 1
+poetry run train --training-data out/training-data.csv --val-data out/validation-data.csv --tokenizer-file out/chess_tokenizer.json --max-length 5 --num-embeddings 64 --num-epochs 3 --batch-size 32 --num-layers 1 --num-heads 1
 ```
 
 Then, open the `run_trained_model.ipynb` notebook to explore the model. Make sure the hyperparameters at the top match the ones used above.
