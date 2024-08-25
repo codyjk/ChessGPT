@@ -3,6 +3,7 @@ from .models import ChessTransformer
 from .training import calculate_random_baseline, train_model
 from .utils import (
     ChessTokenizer,
+    count_lines_fast,
     get_device,
     get_elo_directory,
     prepare_training_data,
@@ -23,4 +24,5 @@ __all__ = [
     "process_raw_games_from_file",
     "raw_game_has_moves",
     "get_elo_directory",
+    "count_lines_fast",
 ]

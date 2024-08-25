@@ -44,16 +44,15 @@ def main():
         file = open(os.path.join(output_directory, f"{directory}.txt"), "w")
         file_handles[directory] = file
 
-    with open(input_file, "r") as file:
-        print("Processing file...")
-        for raw_game in process_raw_games_from_file(file):
-            processed_moves = process_chess_moves(raw_game.moves)
-            if not raw_game_has_moves(raw_game):
-                continue
+    print("Processing file...")
+    for raw_game in process_raw_games_from_file(input_file):
+        processed_moves = process_chess_moves(raw_game.moves)
+        if not raw_game_has_moves(raw_game):
+            continue
 
-            directory = get_elo_directory(raw_game, DIRECTORY_TO_ELO_RATING_RANGE)
-            file_handles[directory].write(processed_moves + "\n")
-            file_write_counters[directory] += 1
+        directory = get_elo_directory(raw_game, DIRECTORY_TO_ELO_RATING_RANGE)
+        file_handles[directory].write(processed_moves + "\n")
+        file_write_counters[directory] += 1
 
     for directory, file_handle in file_handles.items():
         print(f"Processed {file_write_counters[directory]} games in {directory}.")

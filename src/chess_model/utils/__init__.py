@@ -1,3 +1,4 @@
+from .count_lines import count_lines_fast
 from .device import get_device
 from .pgn import (
     get_elo_directory,
@@ -16,4 +17,5 @@ __all__ = [
     "process_chess_moves",
     "raw_game_has_moves",
     "get_elo_directory",
+    "count_lines_fast",
 ]

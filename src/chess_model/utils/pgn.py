@@ -3,6 +3,10 @@ import re
 import sys
 from collections import defaultdict, namedtuple
 
+from tqdm import tqdm
+
+from .count_lines import count_lines_fast
+
 METADATA_PATTERN = re.compile(r"^\s*\[(.*)\]\s*$")
 MOVE_PATTERN = re.compile(
     r"(\d+\.)\s*([BNRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[BNRQ])?(?:e\.p\.)?[+#]?|O-O(?:-O)?)\s*(?:\{[^}]*\})?\s*(?:(\d+)\.{3})?\s*([BNRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[BNRQ])?(?:e\.p\.)?[+#]?|O-O(?:-O)?)?"
@@ -46,20 +50,23 @@ def process_chess_moves(input_string):
     return output
 
 
-def process_raw_games_from_file(file):
+def process_raw_games_from_file(filename):
     current_metadata = []
-    for line in file:
-        if line == "":
-            continue
+    total_lines = count_lines_fast(filename)
 
-        if is_metadata_line(line):
-            current_metadata.append(line)
-            continue
+    with open(filename, "r") as file:
+        for line in tqdm(file, total=total_lines, desc="Processing PGN"):
+            if line == "":
+                continue
 
-        if is_moves_line(line):
-            yield RawGame(current_metadata, line)
-            current_metadata = []
-            continue
+            if is_metadata_line(line):
+                current_metadata.append(line)
+                continue
+
+            if is_moves_line(line):
+                yield RawGame(current_metadata, line)
+                current_metadata = []
+                continue
 
 
 # The metadata contains [WhiteElo "1250"] and [BlackElo "1750"].
