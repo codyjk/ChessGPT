@@ -58,7 +58,13 @@ class ChessTokenizer:
         total_lines = count_lines_fast(csv_file)
 
         with open(csv_file, "r") as data:
-            for row in tqdm(data, total=total_lines, desc="Processing moves"):
+            for i, row in enumerate(
+                tqdm(data, total=total_lines, desc="Processing moves")
+            ):
+                if i == 0:
+                    # Skip header row
+                    continue
+
                 context, next_move, _is_checkmate, _outcome = row.strip().split(",")
                 context = context.strip().split()
                 unique_moves.add(next_move)
