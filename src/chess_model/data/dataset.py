@@ -3,6 +3,7 @@ import mmap
 
 import torch
 from torch.utils.data import Dataset
+from tqdm import tqdm
 
 
 class ChessDataset(Dataset):
@@ -37,16 +38,22 @@ class ChessDataset(Dataset):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.line_offsets = []
-
-        # Open the file and keep it open
         self.file = open(self.csv_file, "r")
 
         # Create an index of line offsets for random access
         with open(self.csv_file, "rb") as f:
             mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+            total_size = mm.size()
             self.line_offsets.append(0)
-            while mm.readline():
-                self.line_offsets.append(mm.tell())
+
+            with tqdm(
+                total=total_size, unit="B", unit_scale=True, desc="Indexing CSV file"
+            ) as pbar:
+                while mm.readline():
+                    current_pos = mm.tell()
+                    self.line_offsets.append(current_pos)
+                    pbar.update(current_pos - pbar.n)
+
             mm.close()
 
         # Remove the last offset (empty line at the end of file)
