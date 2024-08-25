@@ -4,6 +4,8 @@ import os
 
 from tqdm import tqdm
 
+from .count_lines import count_lines_fast
+
 PAD_TOKEN = "[PAD]"
 UNK_TOKEN = "[UNK]"
 
