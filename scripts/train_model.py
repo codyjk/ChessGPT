@@ -83,13 +83,9 @@ def main():
         device=device,
     )
 
-    # Save the trained model and tokenizer
+    # Save the trained model
     torch.save(trained_model.state_dict(), args.model_output_file)
-    tokenizer.save(args.tokenizer_output_file)
-
     print(f"Model saved to: {args.model_output_file}")
-    print(f"Tokenizer saved to: {args.tokenizer_output_file}")
-
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(description="Train the LLM.")
