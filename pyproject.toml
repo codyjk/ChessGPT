@@ -31,6 +31,7 @@ prepare-training-data = "scripts.prepare_training_data:main"
 fit-and-save-tokenizer = "scripts.fit_and_save_tokenizer:main"
 train = "scripts.train_model:main"
 test = "pytest:main"
+play = "scripts.play:main"
 
 [tool.black]
 line-length = 88
