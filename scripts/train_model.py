@@ -87,6 +87,7 @@ def main():
     torch.save(trained_model.state_dict(), args.model_output_file)
     print(f"Model saved to: {args.model_output_file}")
 
+
 def build_arg_parser():
     parser = argparse.ArgumentParser(description="Train the LLM.")
     parser.add_argument(
