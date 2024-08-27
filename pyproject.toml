@@ -12,6 +12,8 @@ torch = "^2.4.0"
 tqdm = "^4.66.5"
 transformers = "^4.44.0"
 numpy = "^2.0.1"
+python-chess = "^1.999"
+blessed = "^1.20.0"
 
 [tool.poetry.group.dev.dependencies]
 flake8 = "^7.1.1"
