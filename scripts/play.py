@@ -48,12 +48,88 @@ def predict_next_move(model, tokenizer, move_sequence, device, top_k=5):
     return predicted_move, move_probs.squeeze()
 
 
+def get_unicode_piece(piece):
+    piece_unicode = {
+        "R": "♜",
+        "N": "♞",
+        "B": "♝",
+        "Q": "♛",
+        "K": "♚",
+        "P": "♟",
+        "r": "♖",
+        "n": "♘",
+        "b": "♗",
+        "q": "♕",
+        "k": "♔",
+        "p": "♙",
+    }
+    return piece_unicode.get(piece, " ")
+
+
 def render_board(term, board, player_color):
     output = term.home + term.clear
-    board_str = str(board)
-    if player_color == chess.BLACK:
-        board_str = "\n".join(reversed(board_str.split("\n")))
-    output += term.white_on_black(board_str)
+
+    files = "abcdefgh"
+    ranks = "87654321" if player_color == chess.WHITE else "12345678"
+
+    # Unicode box-drawing characters
+    h_line = "─"
+    v_line = "│"
+    tl_corner = "┌"
+    tr_corner = "┐"
+    bl_corner = "└"
+    br_corner = "┘"
+    t_joint = "┬"
+    b_joint = "┴"
+    l_joint = "├"
+    r_joint = "┤"
+    cross = "┼"
+
+    # Add file labels at the top
+    output += (
+        "   "
+        + " ".join(
+            f"{f:^3}" for f in (files if player_color == chess.WHITE else files[::-1])
+        )
+        + "\n"
+    )
+
+    # Top border
+    output += (
+        "  " + tl_corner + (h_line * 3 + t_joint) * 7 + h_line * 3 + tr_corner + "\n"
+    )
+
+    for i, rank in enumerate(ranks):
+        output += rank + " " + v_line  # Add rank label and left border
+        for j, file in enumerate(files if player_color == chess.WHITE else files[::-1]):
+            square = chess.parse_square(file + rank)
+            piece = board.piece_at(square)
+            if piece:
+                output += f" {get_unicode_piece(piece.symbol())} " + v_line
+            else:
+                output += " · " + v_line if (i + j) % 2 == 0 else "   " + v_line
+        output += " " + rank + "\n"  # Add rank label at the end of each row
+
+        # Add horizontal line between ranks, except for the last rank
+        if i < 7:
+            output += (
+                "  " + l_joint + (h_line * 3 + cross) * 7 + h_line * 3 + r_joint + "\n"
+            )
+
+    # Bottom border
+    output += (
+        "  " + bl_corner + (h_line * 3 + b_joint) * 7 + h_line * 3 + br_corner + "\n"
+    )
+
+    # Add file labels at the bottom
+    output += (
+        "   "
+        + " ".join(
+            f"{f:^3}" for f in (files if player_color == chess.WHITE else files[::-1])
+        )
+        + "\n"
+    )
+
     return output
 
 
