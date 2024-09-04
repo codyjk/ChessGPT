@@ -318,3 +318,11 @@ poetry run train-model --input-training-data-file out/training-data.csv --input-
 This takes about 5-10 minutes end-to-end on an M1 Macbook Pro, and produces a model that can play 5-10 "good" moves before it starts to lose the thread.
 
 Then, either play the model using the `play` script to see what kinds of moves it makes, open the `run_trained_model.ipynb` notebook to explore the model and plug in any list of moves that you want. In either case, make sure the hyperparameters at the top match the ones used above.
+
+## Pre-trained models to play with
+
+The `trained_models` directory contains a pre-trained model to play against: `len_25_embd_128_layers_2_heads_2`, trained on context length 25, 128 embeddings, 2 layers, 2 heads. Play with it using the command below:
+
+```sh
+poetry run play --input-model-file trained_models/len_25_embd_128_layers_2_heads_2/model.pth --input-tokenizer-file trained_models/len_25_embd_128_layers_2_heads_2/tokenizer.json --max-context-length 25 --num-embeddings 128 --num-layers 2 --num-heads 2
+```
