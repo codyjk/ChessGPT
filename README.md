@@ -103,28 +103,29 @@ After preparing the training data, use the `fit-and-save-tokenizer` script to fi
 
 ```console
 $ poetry run fit-and-save-tokenizer --help
-usage: fit-and-save-tokenizer [-h] --training-data TRAINING_DATA
-                              [--tokenizer-output-file TOKENIZER_OUTPUT_FILE]
+usage: fit-and-save-tokenizer [-h] --input-training-data-file INPUT_TRAINING_DATA_FILE
+                              [--output-tokenizer-file OUTPUT_TOKENIZER_FILE]
 
 Fit and save the tokenizer.
 
 options:
   -h, --help            show this help message and exit
-  --training-data TRAINING_DATA
-                        The input training data file, as returned by `poetry run prepare-training-
-                        data`
-  --tokenizer-output-file TOKENIZER_OUTPUT_FILE
+  --input-training-data-file INPUT_TRAINING_DATA_FILE
+                        The input training data file, as returned by `poetry run prepare-
+                        training-data`
+  --output-tokenizer-file OUTPUT_TOKENIZER_FILE
                         Where to save tokenizer state. Default: out/chess_tokenizer.json
 ```
 
 For example:
 
 ```console
-$ poetry run fit-and-save-tokenizer --training-data out/training-data.csv
+$ poetry run fit-and-save-tokenizer --input-training-data-file out/training-data.csv
 Fitting tokenizer...
-Counting lines: 76.5MB [00:00, 1.67GB/s]
-Processing moves: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1783171/1783171 [00:01<00:00, 944200.49it/s]
-Tokenizer initialized with vocab_size=1484
+Counting lines in out/training-data.csv...
+Found 2245190 lines.
+Processing moves: 100%|████████████████████████| 2245190/2245190 [00:01<00:00, 1757451.32it/s]
+Tokenizer initialized with vocab_size=388
 Tokenizer saved to: out/chess_tokenizer.json
 ```
 
