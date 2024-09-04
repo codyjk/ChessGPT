@@ -1,3 +1,10 @@
+---
+license: apache-2.0
+base_model: openai-community/gpt2
+library_name: transformers
+pipeline_tag: text-generation
+---
+
 # `chess-llm`
 An LLM that knows how to play chess.
 
