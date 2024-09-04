@@ -11,13 +11,21 @@ from chess_model.utils.tokenizer import ChessTokenizer
 
 
 def load_model(
-    model_path, tokenizer_path, n_positions, n_embd, n_layer, n_head, device
+    input_model_file,
+    input_tokenizer_file,
+    max_context_length,
+    num_embeddings,
+    num_layers,
+    num_heads,
+    device,
 ):
-    tokenizer = ChessTokenizer.load(tokenizer_path)
+    tokenizer = ChessTokenizer.load(input_tokenizer_file)
     vocab_size = tokenizer.vocab_size
 
-    model = ChessTransformer(vocab_size, n_positions, n_embd, n_layer, n_head)
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    model = ChessTransformer(
+        vocab_size, max_context_length, num_embeddings, num_layers, num_heads
+    )
+    model.load_state_dict(torch.load(input_model_file, map_location=device))
     model.to(device)
     model.eval()
 
@@ -144,12 +152,28 @@ def main():
         "--input-tokenizer-file", required=True, help="Path to the tokenizer file"
     )
     parser.add_argument(
-        "--n-positions", type=int, default=50, help="Number of positions"
+        "--max-context-length",
+        type=int,
+        help="The maximum context length (number of moves) that the model was trained against.",
+        required=True,
     )
-    parser.add_argument("--n-embd", type=int, default=256, help="Embedding dimension")
-    parser.add_argument("--n-layer", type=int, default=4, help="Number of layers")
     parser.add_argument(
-        "--n-head", type=int, default=4, help="Number of attention heads"
+        "--num-embeddings",
+        type=int,
+        help="The number of embeddings that the model was trained with.",
+        required=True,
+    )
+    parser.add_argument(
+        "--num-layers",
+        type=int,
+        help="The number of layers that the model was trained with.",
+        required=True,
+    )
+    parser.add_argument(
+        "--num-heads",
+        type=int,
+        help="The number of heads that the model was trained with.",
+        required=True,
     )
     parser.add_argument(
         "--color", default="white", choices=["white", "black"], help="Player's color"
@@ -162,10 +186,10 @@ def main():
     model, tokenizer = load_model(
         args.input_model_file,
         args.input_tokenizer_file,
-        args.n_positions,
-        args.n_embd,
-        args.n_layer,
-        args.n_head,
+        args.max_context_length,
+        args.num_embeddings,
+        args.num_layers,
+        args.num_heads,
         device,
     )
 

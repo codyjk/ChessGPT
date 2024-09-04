@@ -238,9 +238,9 @@ Once the model is trained, you can play a chess game against it using the `play`
 ```console
 $ poetry run play --help
 usage: play [-h] --input-model-file INPUT_MODEL_FILE --input-tokenizer-file
-            INPUT_TOKENIZER_FILE [--n-positions N_POSITIONS] [--n-embd N_EMBD]
-            [--n-layer N_LAYER] [--n-head N_HEAD] [--color {white,black}] [--top-k TOP_K]
-            [--debug]
+            INPUT_TOKENIZER_FILE --max-context-length MAX_CONTEXT_LENGTH --num-embeddings
+            NUM_EMBEDDINGS --num-layers NUM_LAYERS --num-heads NUM_HEADS
+            [--color {white,black}] [--top-k TOP_K] [--debug]
 
 Chess CLI for playing against a trained model
 
@@ -250,11 +250,15 @@ options:
                         Path to the trained model file
   --input-tokenizer-file INPUT_TOKENIZER_FILE
                         Path to the tokenizer file
-  --n-positions N_POSITIONS
-                        Number of positions
-  --n-embd N_EMBD       Embedding dimension
-  --n-layer N_LAYER     Number of layers
-  --n-head N_HEAD       Number of attention heads
+  --max-context-length MAX_CONTEXT_LENGTH
+                        The maximum context length (number of moves) that the model was
+                        trained against.
+  --num-embeddings NUM_EMBEDDINGS
+                        The number of embeddings that the model was trained with.
+  --num-layers NUM_LAYERS
+                        The number of layers that the model was trained with.
+  --num-heads NUM_HEADS
+                        The number of heads that the model was trained with.
   --color {white,black}
                         Player's color
   --top-k TOP_K         Top-k sampling parameter
@@ -304,7 +308,7 @@ shuf -n 100000 out/master.txt > out/master-trunc.txt
 # Prepare the training data
 poetry run fit-and-save-tokenizer --input-training-data-file out/training-data.csv
 
-# Train the model. Make sure to use the same context-length as above
+# Train the model. Make sure to use the same max-context-length as above
 poetry run train-model --input-training-data-file out/training-data.csv --input-validation-data-file out/validation-data.csv --input-tokenizer-file out/chess_tokenizer.json --max-context-length 5 --num-embeddings 64 --num-epochs 3 --batch-size 32 --num-layers 1 --num-heads 1
 ```
 
