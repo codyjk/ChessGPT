@@ -13,7 +13,7 @@ poetry install
 
 ### Preparing training data
 
-#### Reducing PGN files
+#### Reducing PGN database files
 
 The model is trained against games that are represented as sequences of moves in algebraic notation, terminated by the outcome of the game (`1-0`, `0-1`, or `1/2-1/2`).
 
@@ -27,22 +27,25 @@ e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5 f3 e6 c3 Nf6 Bd3 Nbd7 Ne2 Be7 O-O O-O N2g3 Bg6 Qc2
 
 ```console
 $ poetry run reduce-pgn --help
-usage: reduce-pgn [-h] --input-pgn INPUT_PGN --output-dir OUTPUT_DIR
+usage: reduce-pgn [-h] --input-pgn-file INPUT_PGN_FILE --output-dir OUTPUT_DIR
 
-Reduce a chess games PGN file to a list of moves.
+Reduce a chess games PGN database file to a list of moves. The reduced files will be
+organized by rating range (beginner, intermediate, master, grandmaster).
 
 options:
   -h, --help            show this help message and exit
-  --input-pgn INPUT_PGN
+  --input-pgn-file INPUT_PGN_FILE
                         The input PGN file.
   --output-dir OUTPUT_DIR
-                        The output directory.
+                        The output directory, where one reduced file will be written per ELO
+                        rating range. Any of these files can then be used in the `prepare-
+                        training-data` step.
 ```
 
 The default configuration for ELO ranges yields the following:
 
 ```console
-$ poetry run reduce-pgn --input-pgn data/lichess_db_standard_rated_2024-06.pgn --output-dir out
+$ poetry run reduce-pgn --input-pgn-file data/lichess_db_standard_rated_2024-06.pgn --output-dir out
 Processing file...
 Processed 1116435 games in beginner.
 Processed 3120115 games in intermediate.
@@ -231,7 +234,7 @@ Training Progress: 100%|██████████| 42084/42084 [08:27<00:00
 Model saved to: out/chess_transformer_model.pth
 ```
 
-### Playing against the model
+#### Playing against the model
 
 Once the model is trained, you can play a chess game against it using the `play` script. You will need to use the same hyperparameters you used to train the model.
 
@@ -292,7 +295,7 @@ Moves played: d4 Nc6 Nf3 g6 Bf4 Bg7 e3 Nf6 c4 O-O Be2 a6 Nc3 b5 b3 bxc4 bxc4
 Enter your move:
 ```
 
-## Quick way of validating that the model actually works
+### Quick way of validating that the model actually works
 
 A quick way to validate that the model works is to use a small dataset of ~100,000 games with small hyperperameters, like the example shown above.
 

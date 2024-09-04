@@ -23,19 +23,22 @@ DIRECTORY_TO_ELO_RATING_RANGE = {
 
 def main():
     """
-    Usage: poetry run reduce-pgn --input-pgn input-pgn-file --output-dir output-directory
+    Usage: poetry run reduce-pgn --input-pgn-file <input-pgn-file> --output-dir <output-dir>
     """
     parser = argparse.ArgumentParser(
-        description="Reduce a chess games PGN file to a list of moves."
+        description="Reduce a chess games PGN database file to a list of moves. The reduced files will be organized by rating range (beginner, intermediate, master, grandmaster)."
     )
     parser.add_argument(
-        "--input-pgn", type=str, help="The input PGN file.", required=True
+        "--input-pgn-file", type=str, help="The input PGN file.", required=True
     )
     parser.add_argument(
-        "--output-dir", type=str, help="The output directory.", required=True
+        "--output-dir",
+        type=str,
+        help="The output directory, where one reduced file will be written per ELO rating range. Any of these files can then be used in the `prepare-training-data` step.",
+        required=True,
     )
     args = parser.parse_args()
-    input_file = args.input_pgn
+    input_file = args.input_pgn_file
     output_directory = args.output_dir
 
     file_write_counters = defaultdict(int)
