@@ -3,7 +3,7 @@ import os
 import sys
 from collections import defaultdict
 
-from chess_model import (
+from chess_model.util import (
     get_elo_directory,
     process_chess_moves,
     process_raw_games_from_file,

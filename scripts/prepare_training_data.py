@@ -1,6 +1,6 @@
 import argparse
 
-from chess_model import prepare_training_data
+from chess_model.util import prepare_training_data
 
 DEFAULT_MAX_CONTEXT_LENGTH = 10
 DEFAULT_VALIDATION_SPLIT = 0.1

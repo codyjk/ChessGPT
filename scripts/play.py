@@ -6,8 +6,7 @@ import torch
 import torch.nn.functional as F
 from blessed import Terminal
 
-from chess_model.models.transformer import ChessTransformer
-from chess_model.utils.tokenizer import ChessTokenizer
+from chess_model.model import ChessTokenizer, ChessTransformer
 
 
 def load_model(

@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-from chess_model.utils.tokenizer import ChessTokenizer
+from chess_model.model.tokenizer import ChessTokenizer
 
 
 def train_model(

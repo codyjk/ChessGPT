@@ -1,6 +1,6 @@
 import argparse
 
-from chess_model import ChessTokenizer
+from chess_model.model import ChessTokenizer
 
 DEFAULT_TOKENIZER_OUTPUT_FILE = "out/chess_tokenizer.json"
 

@@ -3,14 +3,10 @@ import argparse
 import torch
 from torch.utils.data import DataLoader
 
-from chess_model import (
-    ChessDataset,
-    ChessTokenizer,
-    ChessTransformer,
-    calculate_random_baseline,
-    get_device,
-    train_model,
-)
+from chess_model.data import ChessDataset
+from chess_model.model import ChessTokenizer, ChessTransformer
+from chess_model.training import calculate_random_baseline, train_model
+from chess_model.util import get_device
 
 DEFAULT_MAX_LENGTH = 50
 DEFAULT_NUM_EMBEDDINGS = 256

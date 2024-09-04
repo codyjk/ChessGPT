@@ -7,12 +7,10 @@ from .pgn import (
     raw_game_has_moves,
 )
 from .preprocessing import prepare_training_data
-from .tokenizer import ChessTokenizer
 
 __all__ = [
     "get_device",
     "prepare_training_data",
-    "ChessTokenizer",
     "process_raw_games_from_file",
     "process_chess_moves",
     "raw_game_has_moves",
