@@ -64,33 +64,37 @@ Once the games have been reduced to the format described above, you can use the 
 
 ```console
 $ poetry run prepare-training-data --help
-usage: prepare-training-data [-h] --input-file INPUT_FILE --output-dir
-                             OUTPUT_DIR
+usage: prepare-training-data [-h] --input-reduced-pgn-file INPUT_REDUCED_PGN_FILE
+                             [--output-training-data-file OUTPUT_TRAINING_DATA_FILE]
+                             [--output-validation-data-file OUTPUT_VALIDATION_DATA_FILE]
                              [--max-context-length MAX_CONTEXT_LENGTH]
                              [--validation-split VALIDATION_SPLIT]
 
-Prepare training data for the model.
+Prepares training and validation data sets for the model training step.
 
 options:
   -h, --help            show this help message and exit
-  --input-file INPUT_FILE
-                        The input file.
-  --output-dir OUTPUT_DIR
-                        The output directory.
+  --input-reduced-pgn-file INPUT_REDUCED_PGN_FILE
+                        The input file, as returned by `poetry run reduce-pgn`.
+  --output-training-data-file OUTPUT_TRAINING_DATA_FILE
+                        Where to save the training data. Default: out/training-data.csv
+  --output-validation-data-file OUTPUT_VALIDATION_DATA_FILE
+                        Where to save the validation data. Default: out/validation-data.csv
   --max-context-length MAX_CONTEXT_LENGTH
-                        The maximum number of moves to include in the
-                        context. Default: 50
+                        The maximum number of moves to include in the context for the
+                        examples written to the training and validation data files. Default:
+                        10
   --validation-split VALIDATION_SPLIT
-                        The proportion of the data to use for validation.
-                        Default: 0.1
+                        The proportion of the data to use for validation. Default: 0.1
 ```
-
 
 Depending on the file size, this may take a while, but you will see the progress as the script runs:
 
 ```console
-$ poetry run prepare-training-data --input-file out/grandmaster.txt --output-dir out
-Processing games:  17%|██████████████▌                                       | 18605/111121 [00:06<00:32, 2873.69it/s]
+$ poetry run prepare-training-data --input-reduced-pgn-file out/all-trunc.txt --max-context-length 5
+Processing games: 100%|███████████████████████████| 500000/500000 [00:02<00:00, 176300.05it/s]
+Training data written to: out/training-data.csv
+Validation data written to: out/validation-data.csv
 ```
 
 #### Preparing the tokenizer
