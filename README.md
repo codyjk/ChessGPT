@@ -215,17 +215,80 @@ Num training epochs:    3
 Initial learning rate:  0.001
 ###################################################################################################
 Loading tokenizer...
-Tokenizer initialized with vocab_size=388
+Tokenizer initialized with vocab_size=305
 Loading training/validation data...
-Indexing CSV file: 100%|█████████████████████████████████| 31.6M/31.6M [00:00<00:00, 41.2MB/s]
-Indexing CSV file: 100%|█████████████████████████████████| 3.52M/3.52M [00:00<00:00, 35.6MB/s]
+Indexing CSV file: 100%|█████████████████████████████████| 6.32M/6.32M [00:00<00:00, 36.8MB/s]
+Indexing CSV file: 100%|███████████████████████████████████| 704k/704k [00:00<00:00, 34.6MB/s]
 Using device: mps
-Calculating random baseline: 100%|█████████████████████| 70163/70163 [01:48<00:00, 648.16it/s]
-Random baseline loss: 6.0021
-Training Progress:   0%|           | 813/210489 [00:15<39:53, 87.62it/s, epoch=1, loss=1.7175]Training Progress:   0%|           | 949/210489 [00:16<39:48, 87.73it/s, epoch=1, loss=1.8162]
+Calculating random baseline: 100%|█████████████████████| 14028/14028 [00:20<00:00, 677.71it/s]
+Random baseline loss: 5.7613
+Epoch 1/3, Train Loss: 1.9003, Val Loss: 1.7609, Learning Rate: 0.001000
+Training Progress:  67%|██████▋   | 28056/42084 [05:35<02:49, 82.63it/s, epoch=2, loss=1.7381]
+Epoch 2/3, Train Loss: 1.8021, Val Loss: 1.7376, Learning Rate: 0.001000
+Training Progress: 100%|██████████| 42084/42084 [08:22<00:00, 87.52it/s, epoch=3, loss=1.9243]
+Epoch 3/3, Train Loss: 1.7790, Val Loss: 1.7136, Learning Rate: 0.001000
+Training Progress: 100%|██████████| 42084/42084 [08:27<00:00, 82.98it/s, epoch=3, loss=1.9243]
+Model saved to: out/chess_transformer_model.pth
 ```
 
-### Validating that the model actually works
+### Playing against the model
+
+Once the model is trained, you can play a chess game against it using the `play` script. You will need to use the same hyperparameters you used to train the model.
+
+```console
+$ poetry run play --help
+usage: play [-h] --input-model-file INPUT_MODEL_FILE --input-tokenizer-file
+            INPUT_TOKENIZER_FILE [--n-positions N_POSITIONS] [--n-embd N_EMBD]
+            [--n-layer N_LAYER] [--n-head N_HEAD] [--color {white,black}] [--top-k TOP_K]
+            [--debug]
+
+Chess CLI for playing against a trained model
+
+options:
+  -h, --help            show this help message and exit
+  --input-model-file INPUT_MODEL_FILE
+                        Path to the trained model file
+  --input-tokenizer-file INPUT_TOKENIZER_FILE
+                        Path to the tokenizer file
+  --n-positions N_POSITIONS
+                        Number of positions
+  --n-embd N_EMBD       Embedding dimension
+  --n-layer N_LAYER     Number of layers
+  --n-head N_HEAD       Number of attention heads
+  --color {white,black}
+                        Player's color
+  --top-k TOP_K         Top-k sampling parameter
+  --debug               Enable debug output
+```
+
+When it boots up, you will be dropped into a chess game in the terminal! You will need to enter moves in algebraic notation.
+
+```console
+    h   g   f   e   d   c   b   a
+  ┌───┬───┬───┬───┬───┬───┬───┬───┐
+1 │ ♜ │   │ · │ ♚ │ ♛ │   │ · │ ♜ │ 1
+  ├───┼───┼───┼───┼───┼───┼───┼───┤
+2 │ ♟ │ ♟ │ ♟ │ ♝ │   │ · │   │ ♟ │ 2
+  ├───┼───┼───┼───┼───┼───┼───┼───┤
+3 │ · │   │ ♞ │ ♟ │ · │ ♞ │ · │   │ 3
+  ├───┼───┼───┼───┼───┼───┼───┼───┤
+4 │   │ · │ ♝ │ · │ ♟ │ ♟ │   │ · │ 4
+  ├───┼───┼───┼───┼───┼───┼───┼───┤
+5 │ · │   │ · │   │ · │   │ · │   │ 5
+  ├───┼───┼───┼───┼───┼───┼───┼───┤
+6 │   │ ♙ │ ♘ │ · │   │ ♘ │   │ ♙ │ 6
+  ├───┼───┼───┼───┼───┼───┼───┼───┤
+7 │ ♙ │ ♗ │ ♙ │ ♙ │ ♙ │ ♙ │ · │   │ 7
+  ├───┼───┼───┼───┼───┼───┼───┼───┤
+8 │   │ ♔ │ ♖ │ · │ ♕ │ ♗ │   │ ♖ │ 8
+  └───┴───┴───┴───┴───┴───┴───┴───┘
+    h   g   f   e   d   c   b   a
+
+Moves played: d4 Nc6 Nf3 g6 Bf4 Bg7 e3 Nf6 c4 O-O Be2 a6 Nc3 b5 b3 bxc4 bxc4
+Enter your move:
+```
+
+## Validating that the model actually works
 
 A quick way to validate that the model works is to use a small dataset of ~100,000 games with small hyperperameters, like the example shown above.
 
@@ -239,10 +302,10 @@ poetry run reduce-pgn --input-pgn data/lichess_db_standard_rated_2024-06.pgn --o
 shuf -n 100000 out/master.txt > out/master-trunc.txt
 
 # Prepare the training data
-poetry run prepare-training-data --input-file out/master-trunc.txt --output-dir out --max-length 5
+poetry run fit-and-save-tokenizer --input-training-data-file out/training-data.csv
 
 # Train the model. Make sure to use the same context-length as above
-poetry run train --training-data out/training-data.csv --val-data out/validation-data.csv --tokenizer-file out/chess_tokenizer.json --max-length 5 --num-embeddings 64 --num-epochs 3 --batch-size 32 --num-layers 1 --num-heads 1
+poetry run train-model --input-training-data-file out/training-data.csv --input-validation-data-file out/validation-data.csv --input-tokenizer-file out/chess_tokenizer.json --max-context-length 5 --num-embeddings 64 --num-epochs 3 --batch-size 32 --num-layers 1 --num-heads 1
 ```
 
 Then, open the `run_trained_model.ipynb` notebook to explore the model. Make sure the hyperparameters at the top match the ones used above.

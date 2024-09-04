@@ -137,8 +137,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Chess CLI for playing against a trained model"
     )
-    parser.add_argument("--model", required=True, help="Path to the trained model file")
-    parser.add_argument("--tokenizer", required=True, help="Path to the tokenizer file")
+    parser.add_argument(
+        "--input-model-file", required=True, help="Path to the trained model file"
+    )
+    parser.add_argument(
+        "--input-tokenizer-file", required=True, help="Path to the tokenizer file"
+    )
     parser.add_argument(
         "--n-positions", type=int, default=50, help="Number of positions"
     )
@@ -156,8 +160,8 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, tokenizer = load_model(
-        args.model,
-        args.tokenizer,
+        args.input_model_file,
+        args.input_tokenizer_file,
         args.n_positions,
         args.n_embd,
         args.n_layer,
