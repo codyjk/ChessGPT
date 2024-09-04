@@ -288,7 +288,7 @@ Moves played: d4 Nc6 Nf3 g6 Bf4 Bg7 e3 Nf6 c4 O-O Be2 a6 Nc3 b5 b3 bxc4 bxc4
 Enter your move:
 ```
 
-## Validating that the model actually works
+## Quick way of validating that the model actually works
 
 A quick way to validate that the model works is to use a small dataset of ~100,000 games with small hyperperameters, like the example shown above.
 
@@ -308,4 +308,6 @@ poetry run fit-and-save-tokenizer --input-training-data-file out/training-data.c
 poetry run train-model --input-training-data-file out/training-data.csv --input-validation-data-file out/validation-data.csv --input-tokenizer-file out/chess_tokenizer.json --max-context-length 5 --num-embeddings 64 --num-epochs 3 --batch-size 32 --num-layers 1 --num-heads 1
 ```
 
-Then, open the `run_trained_model.ipynb` notebook to explore the model. Make sure the hyperparameters at the top match the ones used above.
+This takes about 5-10 minutes end-to-end on an M1 Macbook Pro, and produces a model that can play 5-10 "good" moves before it starts to lose the thread.
+
+Then, either play the model using the `play` script to see what kinds of moves it makes, open the `run_trained_model.ipynb` notebook to explore the model and plug in any list of moves that you want. In either case, make sure the hyperparameters at the top match the ones used above.
