@@ -31,7 +31,7 @@ build-backend = "poetry.core.masonry.api"
 reduce-pgn = "scripts.reduce_pgn_to_moves:main"
 prepare-training-data = "scripts.prepare_training_data:main"
 fit-and-save-tokenizer = "scripts.fit_and_save_tokenizer:main"
-train = "scripts.train_model:main"
+train-model = "scripts.train_model:main"
 test = "pytest:main"
 play = "scripts.play:main"
 

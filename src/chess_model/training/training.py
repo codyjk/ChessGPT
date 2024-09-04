@@ -18,11 +18,6 @@ def train_model(
     )
     next_move_criterion = nn.CrossEntropyLoss()
 
-    best_val_loss = float("inf")
-    best_model = None
-    patience = 5
-    patience_counter = 0
-
     total_steps = num_epochs * len(train_dataloader)
     progress_bar = tqdm(total=total_steps, desc="Training Progress")
 
@@ -74,19 +69,8 @@ def train_model(
             f"\nEpoch {epoch+1}/{num_epochs}, Train Loss: {avg_loss:.4f}, Val Loss: {avg_val_loss:.4f}, Learning Rate: {current_lr:.6f}"
         )
 
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            best_model = copy.deepcopy(model)
-            patience_counter = 0
-        else:
-            patience_counter += 1
-
-        if patience_counter >= patience:
-            print("Early stopping triggered")
-            break
-
     progress_bar.close()
-    return best_model
+    return model
 
 
 def calculate_random_baseline(dataloader, vocab_size, device):
