@@ -74,6 +74,25 @@ class ChessDataset(Dataset):
         labels = context[1:] + [last_move]
         labels = self.tokenizer.encode_and_pad(labels, self.max_context_length)
 
+        # If white won, we want the model to learn from white's moves, not black's.
+        # Conversely, if black won, we want the model to learn from black's moves.
+        # For draws, we want the model to learn from both moves.
+        # We will produce a mask that masks out the moves for the losing player,
+        # and the model will learn from the remaining moves.
+        move_mask = torch.ones(self.max_context_length, dtype=torch.float)
+
+        if outcome == "1-0":  # White won
+            # Mask out odd-indexed moves (Black's moves)
+            move_mask[1::2] = 0
+        elif outcome == "0-1":  # Black won
+            # Mask out even-indexed moves (White's moves)
+            move_mask[::2] = 0
+        # For draws (1/2-1/2), keep all moves (mask stays 1)
+
+        # If the context is shorter than max_context_length, zero-out that part of the mask
+        if len(context) < self.max_context_length:
+            move_mask[len(context) :] = 0
+
         # Convert outcome to one-hot encoding (as float)
         outcome_label = torch.zeros(3, dtype=torch.float)
         if outcome == "1-0":
@@ -88,6 +107,7 @@ class ChessDataset(Dataset):
             "labels": torch.tensor(labels, dtype=torch.long),
             "is_checkmate": torch.tensor(is_checkmate, dtype=torch.float),
             "outcome": outcome_label,
+            "move_mask": move_mask,
         }
 
     def __del__(self):

@@ -42,11 +42,13 @@ def test_chess_dataset_getitem(chess_dataset):
     assert "labels" in item
     assert "is_checkmate" in item
     assert "outcome" in item
+    assert "move_mask" in item
 
     assert item["input_ids"].shape == (10,)  # max_context_length is 10
     assert item["labels"].shape == (10,)  # same size as input_ids
     assert item["is_checkmate"].shape == ()  # Single value
     assert item["outcome"].shape == (3,)  # One-hot encoding for 3 possible outcomes
+    assert item["move_mask"].shape == (10,)  # max_context_length is 10
 
     # Check if the input_ids are correct for the context.
     # 2 padding tokens + 8 move tokens.
@@ -62,3 +64,10 @@ def test_chess_dataset_getitem(chess_dataset):
     assert item["is_checkmate"].item() == 0.0
     # Outcome is specified as white win
     assert item["outcome"].tolist() == [1.0, 0.0, 0.0]
+
+    # Move mask should be 1s for white moves (even-indexed) and 0s for black moves (odd-indexed).
+    # It should also accommodate 0.0s for any padding tokens.
+    expected_move_mask = [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+    print(f"expected_move_mask: {expected_move_mask}")
+    print(f"item['move_mask']: {item['move_mask'].tolist()}")
+    assert item["move_mask"].tolist() == expected_move_mask

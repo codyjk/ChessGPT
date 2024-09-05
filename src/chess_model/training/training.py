@@ -31,8 +31,10 @@ def train_model(
             input_ids = batch["input_ids"].to(device)
 
             # next_move_labels shape: [batch_size, seq_len]
-            # Assuming batch_size = 128, seq_len = 50
             next_move_labels = batch["labels"].to(device)
+
+            # move_mask shape: [batch_size, seq_len]
+            move_mask = batch["move_mask"].to(device)
 
             optimizer.zero_grad()
 
@@ -40,21 +42,9 @@ def train_model(
             # Assuming batch_size = 128, seq_len = 50, vocab_size = 531
             next_move_logits = model(input_ids)
 
-            # Reshape tensors for loss calculation
-            batch_size, seq_len, vocab_size = next_move_logits.size()
-
-            # Reshape next_move_logits to [batch_size * seq_len, vocab_size]
-            # New shape: [6400, 531] (128 * 50 = 6400)
-            next_move_logits = next_move_logits.view(-1, vocab_size)
-
-            # Reshape next_move_labels to [batch_size * seq_len]
-            # New shape: [6400] (128 * 50 = 6400)
-            next_move_labels = next_move_labels.view(-1)
-
-            # Calculate loss
-            # next_move_logits shape: [6400, 531]
-            # next_move_labels shape: [6400]
-            loss = next_move_criterion(next_move_logits, next_move_labels)
+            loss = calculate_masked_loss(
+                next_move_logits, next_move_labels, move_mask, next_move_criterion
+            )
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -75,15 +65,11 @@ def train_model(
             for batch in val_dataloader:
                 input_ids = batch["input_ids"].to(device)
                 next_move_labels = batch["labels"].to(device)
-
-                # TODO(codyjk): Abstract loss calculation into a separate function
-                # for use here and in the training loop
+                move_mask = batch["move_mask"].to(device)
                 next_move_logits = model(input_ids)
-                batch_size, seq_len, vocab_size = next_move_logits.size()
-                next_move_logits = next_move_logits.view(-1, vocab_size)
-                next_move_labels = next_move_labels.view(-1)
-                loss = next_move_criterion(next_move_logits, next_move_labels)
-
+                loss = calculate_masked_loss(
+                    next_move_logits, next_move_labels, move_mask, next_move_criterion
+                )
                 val_loss += loss.item()
 
         avg_val_loss = val_loss / len(val_dataloader)
@@ -98,3 +84,30 @@ def train_model(
 
     progress_bar.close()
     return model
+
+
+def calculate_masked_loss(next_move_logits, next_move_labels, move_mask, criterion):
+    # Reshape tensors for loss calculation
+    # Assuming batch_size = 128, seq_len = 50 for comments
+    batch_size, seq_len, vocab_size = next_move_logits.size()
+
+    # Reshape next_move_logits to [batch_size * seq_len, vocab_size]
+    # New shape: [6400, 531] (128 * 50 = 6400)
+    next_move_logits = next_move_logits.view(-1, vocab_size)
+
+    # Reshape next_move_labels to [batch_size * seq_len]
+    # New shape: [6400] (128 * 50 = 6400)
+    next_move_labels = next_move_labels.view(-1)
+
+    move_mask = move_mask.view(-1)
+
+    # Calculate loss
+    loss = criterion(next_move_logits, next_move_labels)
+
+    # Apply move mask to the loss
+    masked_loss = loss * move_mask
+
+    # Average the loss over non-zero elements
+    final_loss = masked_loss.sum() / (move_mask.sum() + 1e-8)
+
+    return final_loss
