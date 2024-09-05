@@ -21,7 +21,5 @@ class ChessTransformer(nn.Module):
     def forward(self, input_ids, attention_mask=None):
         outputs = self.transformer(input_ids, attention_mask=attention_mask)
         hidden_states = outputs.last_hidden_state
-        prediction_hidden_state = hidden_states[:, -1, :]
-
-        next_move_logits = self.next_move_head(prediction_hidden_state)
+        next_move_logits = self.next_move_head(hidden_states)
         return next_move_logits

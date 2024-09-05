@@ -1,39 +1,42 @@
 import pytest
 
-from chess_model import ChessDataset, ChessTokenizer
+from chess_model.data import ChessDataset
+from chess_model.model import ChessTokenizer
 
 
 @pytest.fixture
-def chess_tokenizer():
-    tokenizer = ChessTokenizer()
-    moves = ["e4", "e5", "Nf3", "Nc6", "Bb5", "a6", "Ba4"]
-    tokenizer.fit(moves)
-    return tokenizer
+def training_data_file(tmp_path):
+    """
+    The tokenizer sorts the moves before assigning them ids.
 
-
-@pytest.fixture
-def chess_dataset(tmp_path, chess_tokenizer):
-    # Create a temporary CSV file
-    csv_file = tmp_path / "test_chess_data.csv"
-    csv_content = """context,next_move,is_checkmate,outcome
-,e4,0,
-e4,e5,0,
-e4 e5 Nf3,Nc6,0,
-e4 e5 Nf3 Nc6 Bb5,a6,0,
-e4 e5 Nf3 Nc6 Bb5 a6,Ba4,0,
-e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6,O-O,0,1-0
+    Mapping for this test (starting at 2 to account for [PAD] and [UNK]):
+    Ba4 Bb5 Nc6 Nf3 Nf6 O-O a6 e4 e5
+    2   3   4   5   6   7   8  9  10
+    """
+    path = tmp_path / "test_chess_data.csv"
+    csv_content = """context,is_checkmate,outcome
+e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O,0,1-0
 """
-    csv_file.write_text(csv_content)
+    path.write_text(csv_content)
+    return path
 
-    return ChessDataset(str(csv_file), chess_tokenizer, max_length=10)
+
+@pytest.fixture
+def chess_dataset(training_data_file, chess_tokenizer):
+    return ChessDataset(str(training_data_file), chess_tokenizer, max_length=10)
+
+
+@pytest.fixture
+def chess_tokenizer(training_data_file):
+    return ChessTokenizer.fit(str(training_data_file))
 
 
 def test_chess_dataset_len(chess_dataset):
-    assert len(chess_dataset) == 6  # 6 examples in the CSV file
+    assert len(chess_dataset) == 1  # 1 examples in the CSV file
 
 
 def test_chess_dataset_getitem(chess_dataset):
-    item = chess_dataset[2]
+    item = chess_dataset[0]
 
     assert "input_ids" in item
     assert "labels" in item
@@ -41,30 +44,21 @@ def test_chess_dataset_getitem(chess_dataset):
     assert "outcome" in item
 
     assert item["input_ids"].shape == (10,)  # max_length is 10
-    assert item["labels"].shape == ()  # Single label
+    assert item["labels"].shape == (10,)  # same size as input_ids
     assert item["is_checkmate"].shape == ()  # Single value
     assert item["outcome"].shape == (3,)  # One-hot encoding for 3 possible outcomes
 
-    # Check if the input_ids are correct for the context "e4 e5 Nf3"
-    expected_input = [0] * 7 + [2, 3, 4]  # 7 padding tokens + 3 move tokens
+    # Check if the input_ids are correct for the context.
+    # 2 padding tokens + 8 move tokens.
+    # The input should not include the final move
+    # The mapping of ids is described at the top in the test fixture.
+    expected_input = [0] * 2 + [9, 10, 5, 4, 3, 8, 2, 6]
     assert item["input_ids"].tolist() == expected_input
 
     # Check if the label is correct for the next_move "Nc6"
-    assert item["labels"].item() == chess_dataset.tokenizer.move_to_id["Nc6"]
+    expected_labels = [0] * 2 + [10, 5, 4, 3, 8, 2, 6, 7]
+    assert item["labels"].tolist() == expected_labels
 
     assert item["is_checkmate"].item() == 0.0
-    assert item["outcome"].tolist() == [0.0, 0.0, 0.0]  # No outcome specified
-
-
-def test_chess_dataset_padding(chess_dataset):
-    item = chess_dataset[4]  # Second to last item in fixture
-
-    # The tokenizer is initialized with `[UNK]` and `[PAD]` tokens, so any new tokens
-    # passed in start at index 2. Therefore, `e4` is at index 2, `e5` at index 3, etc.
-    expected_input = [0] * 4 + [2, 3, 4, 5, 6, 7]  # 4 padding tokens + 6 move tokens
-    assert item["input_ids"].tolist() == expected_input
-
-
-def test_chess_dataset_outcome(chess_dataset):
-    item = chess_dataset[len(chess_dataset) - 1]  # The last item has the outcome
-    assert item["outcome"].tolist() == [1.0, 0.0, 0.0]  # White win
+    # Outcome is specified as white win
+    assert item["outcome"].tolist() == [1.0, 0.0, 0.0]

@@ -5,19 +5,18 @@ from torch.utils.data import DataLoader
 
 from chess_model.data import ChessDataset
 from chess_model.model import ChessTokenizer, ChessTransformer
-from chess_model.training import calculate_random_baseline, train_model
+from chess_model.training import train_model
 from chess_model.util import get_device
 
-DEFAULT_MAX_LENGTH = 50
+DEFAULT_MAX_CONTEXT_LENGTH = 10
 DEFAULT_NUM_EMBEDDINGS = 256
-DEFAULT_NUM_EPOCHS = 10
+DEFAULT_NUM_EPOCHS = 3
 DEFAULT_MODEL_OUTPUT_FILE = "out/chess_transformer_model.pth"
 DEFAULT_TOKENIZER_FILE = "out/chess_tokenizer.json"
 DEFAULT_INITIAL_LEARNING_RATE = 1e-3
 DEFAULT_BATCH_SIZE = 128
 DEFAULT_NUM_LAYERS = 4
 DEFAULT_NUM_HEADS = 4
-DEFAULT_SHOW_RANDOM_BASELINE = True
 
 
 def main():
@@ -64,20 +63,13 @@ def main():
     device = get_device()
     print(f"Using device: {device}")
 
-    # Calculate random baseline loss (if requested)
-    if args.show_random_baseline:
-        random_baseline_loss = calculate_random_baseline(
-            train_dataloader, model.config.vocab_size, device
-        )
-        print(f"Random baseline loss: {random_baseline_loss:.4f}")
-
     # Train the model
     trained_model = train_model(
         model,
         train_dataloader,
         val_dataloader,
         num_epochs=args.num_epochs,
-        learning_rate=1e-3,
+        learning_rate=args.initial_learning_rate,
         device=device,
     )
 
@@ -128,9 +120,9 @@ def build_arg_parser():
     parser.add_argument(
         "--max-context-length",
         type=int,
-        help=f"The maximum context length (number of moves) to train against. Default: {DEFAULT_MAX_LENGTH}",
+        help=f"The maximum context length (number of moves) to train against. Default: {DEFAULT_MAX_CONTEXT_LENGTH}",
         required=False,
-        default=DEFAULT_MAX_LENGTH,
+        default=DEFAULT_MAX_CONTEXT_LENGTH,
     )
     parser.add_argument(
         "--batch-size",
@@ -173,13 +165,6 @@ def build_arg_parser():
         help=f"The initial learning rate to use. Default: {DEFAULT_INITIAL_LEARNING_RATE}",
         required=False,
         default=DEFAULT_INITIAL_LEARNING_RATE,
-    )
-    parser.add_argument(
-        "--show-random-baseline",
-        type=bool,
-        help=f"Whether to show the random baseline loss. Default: {DEFAULT_SHOW_RANDOM_BASELINE}",
-        required=False,
-        default=DEFAULT_SHOW_RANDOM_BASELINE,
     )
 
     return parser

@@ -65,9 +65,8 @@ class ChessTokenizer:
                     # Skip header row
                     continue
 
-                context, next_move, _is_checkmate, _outcome = row.strip().split(",")
+                context, _is_checkmate, _outcome = row.strip().split(",")
                 context = context.strip().split()
-                unique_moves.add(next_move)
                 for move in context:
                     unique_moves.add(move)
 

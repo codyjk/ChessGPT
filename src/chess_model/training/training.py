@@ -26,12 +26,34 @@ def train_model(
         total_loss = 0
 
         for batch in train_dataloader:
+            # input_ids shape: [batch_size, seq_len]
+            # Assuming batch_size = 128, seq_len = 50
             input_ids = batch["input_ids"].to(device)
+
+            # next_move_labels shape: [batch_size, seq_len]
+            # Assuming batch_size = 128, seq_len = 50
             next_move_labels = batch["labels"].to(device)
 
             optimizer.zero_grad()
 
+            # Forward pass next_move_logits shape: [batch_size, seq_len, vocab_size]
+            # Assuming batch_size = 128, seq_len = 50, vocab_size = 531
             next_move_logits = model(input_ids)
+
+            # Reshape tensors for loss calculation
+            batch_size, seq_len, vocab_size = next_move_logits.size()
+
+            # Reshape next_move_logits to [batch_size * seq_len, vocab_size]
+            # New shape: [6400, 531] (128 * 50 = 6400)
+            next_move_logits = next_move_logits.view(-1, vocab_size)
+
+            # Reshape next_move_labels to [batch_size * seq_len]
+            # New shape: [6400] (128 * 50 = 6400)
+            next_move_labels = next_move_labels.view(-1)
+
+            # Calculate loss
+            # next_move_logits shape: [6400, 531]
+            # next_move_labels shape: [6400]
             loss = next_move_criterion(next_move_logits, next_move_labels)
 
             loss.backward()
@@ -54,7 +76,12 @@ def train_model(
                 input_ids = batch["input_ids"].to(device)
                 next_move_labels = batch["labels"].to(device)
 
+                # TODO(codyjk): Abstract loss calculation into a separate function
+                # for use here and in the training loop
                 next_move_logits = model(input_ids)
+                batch_size, seq_len, vocab_size = next_move_logits.size()
+                next_move_logits = next_move_logits.view(-1, vocab_size)
+                next_move_labels = next_move_labels.view(-1)
                 loss = next_move_criterion(next_move_logits, next_move_labels)
 
                 val_loss += loss.item()
@@ -71,19 +98,3 @@ def train_model(
 
     progress_bar.close()
     return model
-
-
-def calculate_random_baseline(dataloader, vocab_size, device):
-    total_loss = 0
-    next_move_criterion = nn.CrossEntropyLoss()
-
-    for batch in tqdm(dataloader, desc="Calculating random baseline"):
-        batch_size = batch["input_ids"].size(0)
-
-        random_next_move_logits = torch.rand(batch_size, vocab_size).to(device)
-        loss = next_move_criterion(random_next_move_logits, batch["labels"].to(device))
-
-        total_loss += loss.item()
-
-    avg_loss = total_loss / len(dataloader)
-    return avg_loss
