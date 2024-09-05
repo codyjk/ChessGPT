@@ -32,9 +32,7 @@ def load_model(args: argparse.Namespace) -> Tuple[ChessTransformer, ChessTokeniz
 def preprocess_input(
     move_sequence: List[str], tokenizer: ChessTokenizer, max_context_length: int
 ) -> torch.Tensor:
-    input_ids = tokenizer.encode(move_sequence)
-    input_ids = input_ids[-max_context_length:]
-    input_ids = [0] * (max_context_length - len(input_ids)) + input_ids
+    input_ids = tokenizer.encode_and_pad(move_sequence, max_context_length)
     return torch.tensor(input_ids).unsqueeze(0)
 
 
@@ -130,8 +128,14 @@ def render_board(term: Terminal, board: chess.Board, player_color: chess.Color) 
 
 
 def print_debug_info(
-    prev_move_probs: torch.Tensor, tokenizer: ChessTokenizer, top_k: int
+    move_sequence: List[str],
+    prev_move_probs: torch.Tensor,
+    prev_attempts: int,
+    prev_invalid_guesses: List[str],
+    tokenizer: ChessTokenizer,
+    top_k: int,
 ):
+    print(f"Context length: {len(move_sequence)}")
     if prev_move_probs is not None:
         top_k_moves = torch.topk(prev_move_probs, top_k)
         print("Top-k predictions:")
@@ -140,6 +144,10 @@ def print_debug_info(
         ):
             move = tokenizer.decode([move_id.item()])[0]
             print(f"{i+1}. {move}: {prob.item():.4f}")
+        print(f"Attempts: {prev_attempts}")
+        if prev_invalid_guesses:
+            print(f"Invalid guesses: {' '.join(prev_invalid_guesses)}")
+        print("")
 
 
 def handle_player_move(board: chess.Board, move_sequence: List[str]) -> None:
@@ -165,31 +173,40 @@ def handle_model_move(
     attempts = 0
     top_k = args.top_k
     move_probs = None
+    attempts, invalid_guesses = 0, []
 
     while not valid_move_found and attempts < 200:
         predicted_move, move_probs = predict_next_move(
             model, tokenizer, move_sequence, args, device
         )
         try:
+            attempts += 1
             board.push_san(predicted_move)
             move_sequence.append(predicted_move)
             valid_move_found = True
             print(f"Model's move: {predicted_move}")
         except ValueError:
-            attempts += 1
+            invalid_guesses.append(predicted_move)
             if attempts % 10 == 0:
                 top_k *= 2
 
     if not valid_move_found:
-        print("Failed to find a valid move. Exiting.")
+        print("Failed to find a valid move.")
+        print_debug_info(
+            move_sequence, move_probs, attempts, invalid_guesses, tokenizer, args.top_k
+        )
+        print_exit_prompt()
         sys.exit(1)
 
-    return move_probs
+    return move_probs, attempts, invalid_guesses
 
 
 def print_game_result(board: chess.Board, move_sequence: List[str]):
     print(f"Final position: {' '.join(move_sequence)}")
     print("Game over. Result:", board.result())
+
+
+def print_exit_prompt():
     print("Exit by typing 'exit' or pressing Ctrl+C.")
     exit_input = input()
     if exit_input.lower() == "exit":
@@ -203,7 +220,10 @@ def play_game(args: argparse.Namespace):
     board = chess.Board()
     move_sequence = []
     player_color = chess.WHITE if args.color.lower() == "white" else chess.BLACK
+
     prev_move_probs = None
+    prev_attempts = 0
+    prev_invalid_guesses = []
 
     with term.fullscreen(), term.hidden_cursor():
         while not board.is_game_over():
@@ -211,18 +231,28 @@ def play_game(args: argparse.Namespace):
             print(f"Moves played: {' '.join(move_sequence)}")
 
             if args.debug:
-                print_debug_info(prev_move_probs, tokenizer, args.top_k)
+                print_debug_info(
+                    move_sequence,
+                    prev_move_probs,
+                    prev_attempts,
+                    prev_invalid_guesses,
+                    tokenizer,
+                    args.top_k,
+                )
 
             if board.turn == player_color:
                 handle_player_move(board, move_sequence)
                 prev_move_probs = None
             else:
-                prev_move_probs = handle_model_move(
-                    board, move_sequence, model, tokenizer, args, device
+                prev_move_probs, prev_attempts, prev_invalid_guesses = (
+                    handle_model_move(
+                        board, move_sequence, model, tokenizer, args, device
+                    )
                 )
 
         print(render_board(term, board, player_color))
         print_game_result(board, move_sequence)
+        print_exit_prompt()
 
 
 def parse_arguments() -> argparse.Namespace:

@@ -25,10 +25,10 @@ class ChessDataset(Dataset):
     access to the data while minimizing memory usage.
     """
 
-    def __init__(self, csv_file, tokenizer, max_length=50):
+    def __init__(self, csv_file, tokenizer, max_context_length=50):
         self.csv_file = csv_file
         self.tokenizer = tokenizer
-        self.max_length = max_length
+        self.max_context_length = max_context_length
         self.line_offsets = []
         self.file = open(self.csv_file, "r")
 
@@ -67,12 +67,12 @@ class ChessDataset(Dataset):
         context, last_move = context[:-1], context[-1]
         is_checkmate = float(is_checkmate)
 
-        input_ids = tokenize_and_pad(context, self.tokenizer, self.max_length)
+        input_ids = self.tokenizer.encode_and_pad(context, self.max_context_length)
 
         # Shift context to the left to create labels
         # The next move prediction for input_ids[n] is labels[n]
         labels = context[1:] + [last_move]
-        labels = tokenize_and_pad(labels, self.tokenizer, self.max_length)
+        labels = self.tokenizer.encode_and_pad(labels, self.max_context_length)
 
         # Convert outcome to one-hot encoding (as float)
         outcome_label = torch.zeros(3, dtype=torch.float)
@@ -94,15 +94,3 @@ class ChessDataset(Dataset):
         # Close the file when the dataset object is destroyed
         if hasattr(self, "file"):
             self.file.close()
-
-
-def tokenize_and_pad(moves, tokenizer, max_length):
-    ids = tokenizer.encode(moves)
-
-    # Keep only the last max_length tokens
-    ids = ids[-max_length:]
-
-    # Pad from the left
-    ids = [0] * (max_length - len(ids)) + ids
-
-    return ids

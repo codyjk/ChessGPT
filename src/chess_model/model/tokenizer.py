@@ -38,6 +38,18 @@ class ChessTokenizer:
         with open(file_path, "w") as f:
             json.dump(state, f)
 
+    def encode_and_pad(self, moves, max_context_length):
+        ids = self.encode(moves)
+
+        # Keep only the last max_context_length tokens
+        ids = ids[-max_context_length:]
+
+        # Pad from the left with PAD_TOKENs
+        pad_length = max_context_length - len(ids)
+        ids = [0] * pad_length + ids
+
+        return ids
+
     @classmethod
     def load(cls, file_path):
         """Load the tokenizer state from a JSON file."""

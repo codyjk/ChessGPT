@@ -48,10 +48,14 @@ def main():
     # Load and prepare data
     print("Loading training/validation data...")
     train_dataset = ChessDataset(
-        args.input_training_data_file, tokenizer, max_length=args.max_context_length
+        args.input_training_data_file,
+        tokenizer,
+        max_context_length=args.max_context_length,
     )
     val_dataset = ChessDataset(
-        args.input_validation_data_file, tokenizer, max_length=args.max_context_length
+        args.input_validation_data_file,
+        tokenizer,
+        max_context_length=args.max_context_length,
     )
 
     train_dataloader = DataLoader(

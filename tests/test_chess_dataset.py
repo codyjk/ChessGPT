@@ -23,7 +23,7 @@ e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O,0,1-0
 
 @pytest.fixture
 def chess_dataset(training_data_file, chess_tokenizer):
-    return ChessDataset(str(training_data_file), chess_tokenizer, max_length=10)
+    return ChessDataset(str(training_data_file), chess_tokenizer, max_context_length=10)
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def test_chess_dataset_getitem(chess_dataset):
     assert "is_checkmate" in item
     assert "outcome" in item
 
-    assert item["input_ids"].shape == (10,)  # max_length is 10
+    assert item["input_ids"].shape == (10,)  # max_context_length is 10
     assert item["labels"].shape == (10,)  # same size as input_ids
     assert item["is_checkmate"].shape == ()  # Single value
     assert item["outcome"].shape == (3,)  # One-hot encoding for 3 possible outcomes

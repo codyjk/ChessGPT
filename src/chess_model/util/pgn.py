@@ -11,7 +11,7 @@ METADATA_PATTERN = re.compile(r"^\s*\[(.*)\]\s*$")
 MOVE_PATTERN = re.compile(
     r"(\d+\.)\s*([BNRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[BNRQ])?(?:e\.p\.)?[+#]?|O-O(?:-O)?)\s*(?:\{[^}]*\})?\s*(?:(\d+)\.{3})?\s*([BNRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[BNRQ])?(?:e\.p\.)?[+#]?|O-O(?:-O)?)?"
 )
-RESULT_PATTERN = re.compile(r"(1-0|0-1|1/2-1/2)")
+OUTCOME_PATTERN = re.compile(r"(1-0|0-1|1/2-1/2)")
 WHITE_ELO_PATTERN = re.compile(r'^\s*\[WhiteElo "(\d+)"\]\s*$')
 BLACK_ELO_PATTERN = re.compile(r'^\s*\[BlackElo "(\d+)"\]\s*$')
 
@@ -25,18 +25,18 @@ def is_metadata_line(line):
 
 
 def is_moves_line(line):
-    return RESULT_PATTERN.search(line)
+    return OUTCOME_PATTERN.search(line)
 
 
-def raw_game_has_moves(raw_game):
-    # If it has no moves, it will end in 1-0, 0-1, or 1/2-1/2 - the longest of
-    # which is 7 characters long.
-    return len(raw_game.moves.strip()) > 7
+def raw_game_has_moves(raw_game, min_moves=2):
+    moves_and_outcome = raw_game.moves.split(" ")
+    moves, outcome = moves_and_outcome[:-1], moves_and_outcome[-1]
+    return len(moves) >= min_moves and OUTCOME_PATTERN.search(outcome)
 
 
 def process_chess_moves(input_string):
     moves = MOVE_PATTERN.findall(input_string)
-    result = RESULT_PATTERN.search(input_string)
+    result = OUTCOME_PATTERN.search(input_string)
 
     processed_moves = []
     for move in moves:
