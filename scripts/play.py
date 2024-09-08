@@ -150,15 +150,105 @@ def print_debug_info(
         print("")
 
 
-def handle_player_move(board: chess.Board, move_sequence: List[str]) -> None:
-    while True:
-        move = input("Enter your move: ")
-        try:
-            board.push_san(move)
-            move_sequence.append(move)
-            break
-        except ValueError:
-            print("Invalid move. Try again.")
+from typing import List, Optional, Tuple
+
+import chess
+
+
+def parse_and_validate_move(
+    board: chess.Board, predicted_move: str
+) -> Optional[chess.Move]:
+    try:
+        # Parse the move in the context of the current board position
+        move = board.parse_san(predicted_move)
+
+        # Validate capture notation
+        is_capture_notation = "x" in predicted_move
+        actual_capture = board.is_capture(move)
+        if is_capture_notation != actual_capture:
+            return None
+
+        # Validate check notation
+        is_check_notation = "+" in predicted_move
+        actual_check = board.gives_check(move)
+        if is_check_notation != actual_check:
+            return None
+
+        # Validate checkmate notation
+        is_checkmate_notation = "#" in predicted_move
+        board_after_move = board.copy()
+        board_after_move.push(move)
+        actual_checkmate = board_after_move.is_checkmate()
+        if is_checkmate_notation != actual_checkmate:
+            return None
+
+        # Validate castling notation
+        is_castling_notation = predicted_move in ["O-O", "O-O-O"]
+        actual_castling = board.is_castling(move)
+        if is_castling_notation != actual_castling:
+            return None
+
+        # Validate pawn promotion notation
+        is_promotion_notation = "=" in predicted_move
+        actual_promotion = move.promotion is not None
+        if is_promotion_notation != actual_promotion:
+            return None
+
+        return move
+    except ValueError:
+        return None
+
+
+def predict_and_validate_move(
+    board: chess.Board,
+    model: ChessTransformer,
+    tokenizer: ChessTokenizer,
+    move_sequence: List[str],
+    args: argparse.Namespace,
+    device: torch.device,
+) -> Tuple[Optional[chess.Move], str, torch.Tensor]:
+    predicted_move, move_probs = predict_next_move(
+        model, tokenizer, move_sequence, args, device
+    )
+    valid_move = parse_and_validate_move(board, predicted_move)
+    return valid_move, predicted_move, move_probs
+
+
+def handle_model_move(
+    board: chess.Board,
+    move_sequence: List[str],
+    model: ChessTransformer,
+    tokenizer: ChessTokenizer,
+    args: argparse.Namespace,
+    device: torch.device,
+) -> Tuple[torch.Tensor, int, List[str]]:
+    attempts = 0
+    top_k = args.top_k
+    move_probs = None
+    invalid_guesses = []
+
+    while attempts < 200:
+        valid_move, predicted_move, move_probs = predict_and_validate_move(
+            board, model, tokenizer, move_sequence, args, device
+        )
+
+        if valid_move:
+            board.push(valid_move)
+            move_sequence.append(predicted_move)
+            print(f"Model's move: {predicted_move}")
+            return move_probs, attempts + 1, invalid_guesses
+
+        attempts += 1
+        invalid_guesses.append(predicted_move)
+        if attempts % 10 == 0:
+            top_k *= 2
+
+    print("Failed to find a valid move.")
+    print_debug_info(
+        move_sequence, move_probs, attempts, invalid_guesses, tokenizer, args.top_k
+    )
+    print_exit_prompt()
+    sys.exit(1)
 
 
 def handle_model_move(
@@ -199,6 +289,17 @@ def handle_model_move(
         sys.exit(1)
 
     return move_probs, attempts, invalid_guesses
+
+
+def handle_player_move(board: chess.Board, move_sequence: List[str]) -> None:
+    while True:
+        move = input("Enter your move: ")
+        try:
+            board.push_san(move)
+            move_sequence.append(move)
+            break
+        except ValueError:
+            print("Invalid move. Try again.")
 
 
 def print_game_result(board: chess.Board, move_sequence: List[str]):
