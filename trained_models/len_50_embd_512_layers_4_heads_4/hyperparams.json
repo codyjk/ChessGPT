@@ -1,0 +1,7 @@
+{
+  "max_context_length": 50,
+  "num_embeddings": 512,
+  "num_layers": 4,
+  "num_heads": 4,
+  "description": "A larger version of `trained_models/len_25_embd_128_layers_2_heads_2`, same training data. In this approach and in each example, the winning player's moves are trained against, whereas the losing player's moves are masked out, so much fewer \"bad\" moves are made, but the model still doesn't actively seek out checkmates. The model is able to make valid (and sometimes competitive) moves way beyond 50, up to 75 sometimes, surprisingly. But it commonly loses the thread in lategame."
+}

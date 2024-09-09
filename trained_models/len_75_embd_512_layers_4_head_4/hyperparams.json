@@ -1,0 +1,8 @@
+{
+  "max_context_length": 75,
+  "num_embeddings": 512,
+  "num_layers": 4,
+  "num_heads": 4,
+  "description": "This is the same dataset as the `trained_models/len_75_embd_512_layers_4_head_4` model. The context window has extended to 75. It makes stronger moves after move 50, and was able to make valid moves to 80-90 in some cases, though it struggles when there are few pieces on the board lategame. I think that is partially due to the small sample size (1m games), and high degree of variability in endgame positions.",
+  "recommended": true
+}

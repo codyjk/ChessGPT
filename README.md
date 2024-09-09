@@ -1,4 +1,4 @@
-# `ChessGPT` (under active development)
+# `ChessGPT`
 A fine-tuned GPT model that knows how to play chess at grandmaster level (without ever having learned the rules).
 
 ## Setup
@@ -10,6 +10,21 @@ poetry install
 ```
 
 ## Usage
+
+### Quick start
+
+The `explore` command will allow you to interact with the pre-trained models included in this project.
+
+```sh
+poetry run explore
+```
+
+This will open an interactive CLI that allows you to explore the models and play against them.
+
+![poetry run explore](explore.png)
+Then, you will be dropped into a chess game in the shell!
+
+![Gameplay](play.png)
 
 ### Training pipeline
 

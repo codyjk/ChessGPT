@@ -1,0 +1,7 @@
+{
+  "max_context_length": 25,
+  "num_embeddings": 128,
+  "num_layers": 2,
+  "num_heads": 2,
+  "description": "This was the first reasonable model that was able to produce realistic games beyond 5 moves. (Prior to this, I was training on context size of 5 with small hyperparameters just to get the model working. I did not add that model to `training_models` since it is quick to reproduce.) This model was trained before I implemented the technique masking out the losing player's moves in the dataset, however, so some of the move choices don't make sense - though up to around 25-30 moves, it is able to make valid predictions before it starts to lose the thread."
+}

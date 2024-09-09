@@ -1,0 +1,7 @@
+{
+  "max_context_length": 75,
+  "num_embeddings": 1024,
+  "num_layers": 8,
+  "num_heads": 8,
+  "description": "Surprisingly, this model did not converge nearly as well as the smaller models. This manifests in the gameplay that terminates early because the model fails to find a valid move. More investigation is needed to understand this."
+}

@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "chess-llm"
+name = "ChessGPT"
 version = "0.1.0"
 description = ""
 authors = ["Cody Joseph Krainock <me@codyjoseph.com>"]
@@ -34,6 +34,7 @@ fit-and-save-tokenizer = "scripts.fit_and_save_tokenizer:main"
 train-model = "scripts.train_model:main"
 test = "pytest:main"
 play = "scripts.play:main"
+explore = "scripts.explore:main"
 
 [tool.black]
 line-length = 88
