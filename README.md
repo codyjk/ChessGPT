@@ -1,5 +1,11 @@
 # `ChessGPT`
-A fine-tuned GPT model that knows how to play chess at grandmaster level (without ever having learned the rules).
+ChessGPT is a custom-trained transformer model that predicts and plays chess moves with remarkable accuracy. The model has no prior knowledge of the rules of chess - it merely learned the game after seeing several million grandmaster-level examples.
+
+Key Features:
+* Trained on the GPT-2 architecture using a massive dataset of high-quality chess games
+* Predicts next moves with high accuracy based _only_ on the context of the previous moves
+* Capable of playing full chess games against humans or other AI
+* Provides details into move probabilities and decision-making process
 
 ## Setup
 
