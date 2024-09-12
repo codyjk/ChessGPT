@@ -35,6 +35,7 @@ train-model = "scripts.train_model:main"
 test = "pytest:main"
 play = "scripts.play:main"
 explore = "scripts.explore:main"
+determine-stockfish-elo = "scripts.determine_stockfish_elo:main"
 
 [tool.black]
 line-length = 88
