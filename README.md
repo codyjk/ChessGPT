@@ -12,8 +12,16 @@ Key Features:
 This project uses [Poetry](https://python-poetry.org/) for dependency management. Once you have poetry, set up the project and its dependencies with:
 
 ```sh
-poetry install
+poetry install --extras "gpu"
 ```
+
+If running this on a machine that is not GPU-enabled (e.g. something like a `t2.micro` instance on EC2), then installation will fail. Instead, do this:
+
+```sh
+poetry install 
+```
+
+This will omit the GPU pytorch packages, meaning you run the scripts to process data, but you will not be able to train the model using GPU acceleration.
 
 ## Usage
 
