@@ -9,19 +9,25 @@ Key Features:
 
 ## Setup
 
-This project uses [Poetry](https://python-poetry.org/) for dependency management. Once you have poetry, set up the project and its dependencies with:
+This project uses [Poetry](https://python-poetry.org/) for dependency management. The installation process differs depending on your use case:
+
+### For Model Training and Playing
+
+If you plan to train or use the model (requires GPU):
 
 ```sh
-poetry install --extras "gpu"
+poetry install
 ```
 
-If running this on a machine that is not GPU-enabled (e.g. something like a `t2.micro` instance on EC2), then installation will fail. Instead, do this:
+### For S3 Data Processing Only (e.g., EC2)
+
+If you only need to run the S3 data processing scripts (e.g., on EC2):
 
 ```sh
-poetry install 
+poetry install --without model
 ```
 
-This will omit the GPU pytorch packages, meaning you run the scripts to process data, but you will not be able to train the model using GPU acceleration.
+This will install only the necessary dependencies for S3 operations without including model-related packages like PyTorch.
 
 ## Usage
 

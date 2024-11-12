@@ -1,23 +1,149 @@
 import argparse
 import os
 import sys
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
-from typing import Iterator, List, Optional
-from uuid import uuid4
+from typing import Iterator, Optional
 
 import boto3
 from botocore.exceptions import ClientError
 from tqdm import tqdm
 
-from chess_model.util import (
+from pgn_utils import (
     process_chess_moves,
     process_raw_games_from_file,
     raw_game_has_moves,
 )
 
-# Previous tree and list functions remain the same...
+
+def create_s3_client(bucket: str):
+    """Create and verify S3 client with bucket access."""
+    s3 = boto3.client("s3")
+    try:
+        s3.head_bucket(Bucket=bucket)
+    except ClientError as e:
+        print(f"Error accessing bucket {bucket}: {e}")
+        sys.exit(1)
+    return s3
+
+
+def format_size(size: int) -> str:
+    """Format size in bytes to human readable format."""
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if size < 1024:
+            return f"{size:.1f}{unit}"
+        size = int(size / 1024)
+    raise ValueError
+
+
+def list_bucket_contents(s3, bucket: str, prefix: str = "") -> Iterator[dict]:
+    """List all objects in bucket with given prefix."""
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        if "Contents" in page:
+            yield from page["Contents"]
+
+
+def print_tree(s3, bucket: str, prefix: str = "", indent: str = ""):
+    """Print tree structure of S3 bucket."""
+    objects = list(list_bucket_contents(s3, bucket, prefix))
+
+    for i, obj in enumerate(sorted(objects, key=lambda x: x["Key"])):
+        is_last = i == len(objects) - 1
+        current_indent = indent + ("└── " if is_last else "├── ")
+
+        # Get just the last part of the path
+        name = obj["Key"].split("/")[-1] or obj["Key"]
+        size = format_size(obj["Size"])
+        print(f"{current_indent}{name} ({size})")
+
+        next_indent = indent + ("    " if is_last else "│   ")
+        if obj["Key"].endswith("/"):
+            print_tree(s3, bucket, obj["Key"], next_indent)
+
+
+def download_and_process_pgn(args: tuple) -> None:
+    """Download and process a single PGN file."""
+    s3, bucket, s3_path, output_dir, min_elo, checkmate_only = args
+
+    local_filename = os.path.join(
+        output_dir, f"{s3_path.replace('/', '_')}.processed.txt"
+    )
+
+    if os.path.exists(local_filename):
+        return
+
+    # Download PGN file
+    try:
+        response = s3.get_object(Bucket=bucket, Key=s3_path)
+        pgn_content = response["Body"].read().decode("utf-8")
+    except ClientError as e:
+        print(f"Error downloading {s3_path}: {e}")
+        return
+
+    # Process games
+    with open(local_filename, "w") as f:
+        for raw_game in process_raw_games_from_file(pgn_content):
+            # Skip games without enough moves
+            if not raw_game_has_moves(raw_game):
+                continue
+
+            # Check ELO requirements if specified
+            if min_elo is not None:
+                white_elo = next(
+                    (
+                        int(l.split('"')[1])
+                        for l in raw_game.metadata
+                        if "[WhiteElo" in l
+                    ),
+                    0,
+                )
+                black_elo = next(
+                    (
+                        int(l.split('"')[1])
+                        for l in raw_game.metadata
+                        if "[BlackElo" in l
+                    ),
+                    0,
+                )
+                if white_elo < min_elo or black_elo < min_elo:
+                    continue
+
+            # Process moves
+            processed_moves = process_chess_moves(raw_game.moves)
+
+            # Check for checkmate if required
+            if checkmate_only and not processed_moves.split()[-2].endswith("#"):
+                continue
+
+            f.write(f"{processed_moves}\n")
+
+
+def tree_command():
+    """Implement s3-tree command."""
+    parser = argparse.ArgumentParser(
+        description="List S3 bucket contents in tree format"
+    )
+    parser.add_argument("bucket", help="S3 bucket name")
+    parser.add_argument("--prefix", help="Optional prefix to start from", default="")
+
+    args = parser.parse_args()
+    s3 = create_s3_client(args.bucket)
+
+    print(f"{args.bucket}")
+    print_tree(s3, args.bucket, args.prefix)
+
+
+def list_pgns_command():
+    """Implement s3-list-pgns command."""
+    parser = argparse.ArgumentParser(description="List PGN files in S3 bucket")
+    parser.add_argument("bucket", help="S3 bucket name")
+
+    args = parser.parse_args()
+    s3 = create_s3_client(args.bucket)
+
+    for obj in list_bucket_contents(s3, args.bucket):
+        if obj["Key"].lower().endswith(".pgn"):
+            print(obj["Key"])
 
 
 def process_games_to_s3(
