@@ -259,12 +259,7 @@ def extract_games_command():
     parser.add_argument("input_bucket", help="Input S3 bucket name")
     parser.add_argument(
         "output_bucket",
-        help="Output S3 bucket and optional directory (e.g., 'my-bucket' or 'my-bucket/my/path')",
-    )
-    parser.add_argument(
-        "--output-prefix",
-        required=True,
-        help="Additional prefix for output files (will be appended to output bucket path)",
+        help="Output S3 bucket and optional path (e.g., 'my-bucket' or 'my-bucket/path/to/output')",
     )
     parser.add_argument("--min-elo", type=int, help="Minimum ELO rating")
     parser.add_argument(
@@ -277,10 +272,7 @@ def extract_games_command():
     # Split bucket and path
     bucket_parts = args.output_bucket.split("/", 1)
     output_bucket = bucket_parts[0]
-    base_path = bucket_parts[1] + "/" if len(bucket_parts) > 1 else ""
-
-    # Combine base path with prefix
-    full_prefix = f"{base_path}{args.output_prefix}"
+    output_prefix = bucket_parts[1] if len(bucket_parts) > 1 else ""
 
     # Process each PGN file sequentially
     for pgn_path in sys.stdin:
@@ -290,7 +282,7 @@ def extract_games_command():
             args.input_bucket,
             output_bucket,
             pgn_path,
-            full_prefix,
+            output_prefix,
             args.min_elo,
             False,
             args.chunk_size,
@@ -305,12 +297,7 @@ def extract_checkmates_command():
     parser.add_argument("input_bucket", help="Input S3 bucket name")
     parser.add_argument(
         "output_bucket",
-        help="Output S3 bucket and optional directory (e.g., 'my-bucket' or 'my-bucket/my/path')",
-    )
-    parser.add_argument(
-        "--output-prefix",
-        required=True,
-        help="Additional prefix for output files (will be appended to output bucket path)",
+        help="Output S3 bucket and optional path (e.g., 'my-bucket' or 'my-bucket/path/to/output')",
     )
     parser.add_argument(
         "--chunk-size", type=int, default=10000, help="Number of games per output file"
@@ -322,10 +309,7 @@ def extract_checkmates_command():
     # Split bucket and path
     bucket_parts = args.output_bucket.split("/", 1)
     output_bucket = bucket_parts[0]
-    base_path = bucket_parts[1] + "/" if len(bucket_parts) > 1 else ""
-
-    # Combine base path with prefix
-    full_prefix = f"{base_path}{args.output_prefix}"
+    output_prefix = bucket_parts[1] if len(bucket_parts) > 1 else ""
 
     # Process each PGN file sequentially
     for pgn_path in sys.stdin:
@@ -335,7 +319,7 @@ def extract_checkmates_command():
             args.input_bucket,
             output_bucket,
             pgn_path,
-            full_prefix,
+            output_prefix,
             None,
             True,
             args.chunk_size,
