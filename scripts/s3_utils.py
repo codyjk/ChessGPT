@@ -104,18 +104,43 @@ class S3PGNProcessor:
         return s3
 
     def _should_include_game(self, raw_game):
-        """Check if a game meets inclusion criteria"""
+        """
+        Check if a game meets inclusion criteria.
+
+        Args:
+            raw_game: RawGame object containing metadata and moves
+
+        Returns:
+            bool: True if game should be included, False otherwise
+        """
         if not raw_game_has_moves(raw_game):
             return False
 
-        white_elo = next(
-            (int(l.split('"')[1]) for l in raw_game.metadata if "[WhiteElo" in l), 0
-        )
-        black_elo = next(
-            (int(l.split('"')[1]) for l in raw_game.metadata if "[BlackElo" in l), 0
-        )
-        if white_elo < self.config.min_elo or black_elo < self.config.min_elo:
-            return False
+        # Only check ELO requirements if min_elo is specified
+        if self.config.min_elo > 0:
+            try:
+                white_elo = next(
+                    (
+                        int(l.split('"')[1])
+                        for l in raw_game.metadata
+                        if "[WhiteElo" in l and l.split('"')[1].isdigit()
+                    ),
+                    0,
+                )
+                black_elo = next(
+                    (
+                        int(l.split('"')[1])
+                        for l in raw_game.metadata
+                        if "[BlackElo" in l and l.split('"')[1].isdigit()
+                    ),
+                    0,
+                )
+
+                if white_elo < self.config.min_elo or black_elo < self.config.min_elo:
+                    return False
+            except (IndexError, ValueError):
+                # If there's any error parsing ELO ratings, skip this game
+                return False
 
         processed_moves = process_chess_moves(raw_game.moves)
         if not processed_moves:
