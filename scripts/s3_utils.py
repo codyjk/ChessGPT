@@ -3,7 +3,6 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
-from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
 
@@ -11,11 +10,7 @@ import boto3
 from botocore.exceptions import ClientError
 from tqdm import tqdm
 
-from pgn_utils import (
-    process_chess_moves,
-    process_raw_games_from_file,
-    raw_game_has_moves,
-)
+from pgn_utils import process_chess_moves
 
 # Set up logging
 logging.basicConfig(
@@ -35,6 +30,7 @@ class ProcessingConfig:
     min_elo: int = 0
     checkmate_only: bool = False
     chunk_size: int = 10000
+    buffer_size: int = 8192  # 8KB buffer size for streaming
 
 
 def list_s3_objects(bucket, prefix=""):
@@ -43,7 +39,7 @@ def list_s3_objects(bucket, prefix=""):
     try:
         s3.head_bucket(Bucket=bucket)
     except ClientError as e:
-        print(f"Error accessing bucket {bucket}: {e}")
+        logging.error(f"Error accessing bucket {bucket}: {e}")
         sys.exit(1)
 
     paginator = s3.get_paginator("list_objects_v2")
@@ -86,68 +82,131 @@ def is_pgn_file(path):
     return path.lower().endswith(".pgn")
 
 
-class S3PGNProcessor:
-    """Handles processing of PGN files from S3"""
-
+class StreamingPGNProcessor:
     def __init__(self, config):
         self.config = config
-        self.s3 = self._create_s3_client()
+        self.s3 = boto3.client("s3")
+        self.current_game_buffer = []
 
-    def _create_s3_client(self):
-        """Create and verify S3 client"""
-        s3 = boto3.client("s3")
+    def stream_pgn_file(self, s3_path):
+        """Process a PGN file from S3 using streaming"""
+        file_id = str(uuid4())
+        chunk_number = 1
+        games_in_chunk = 0
+        temp_file = NamedTemporaryFile(mode="w+", delete=False)
+
         try:
-            s3.head_bucket(Bucket=self.config.input_bucket)
-        except ClientError as e:
-            logging.error(f"Error accessing bucket {self.config.input_bucket}: {e}")
-            sys.exit(1)
-        return s3
+            response = self.s3.get_object(Bucket=self.config.input_bucket, Key=s3_path)
+            stream = response["Body"]
 
-    def _should_include_game(self, raw_game):
-        """
-        Check if a game meets inclusion criteria.
+            buffer = ""
+            while True:
+                chunk = stream.read(self.config.buffer_size).decode("utf-8")
+                if not chunk:
+                    # Process any remaining data in buffer
+                    if buffer:
+                        for game in self._process_buffer(buffer, final=True):
+                            if self._should_keep_game(game):
+                                temp_file.write(f"{game}\n")
+                                games_in_chunk += 1
 
-        Args:
-            raw_game: RawGame object containing metadata and moves
+                                if games_in_chunk >= self.config.chunk_size:
+                                    self._upload_chunk(
+                                        temp_file, chunk_number, file_id, s3_path
+                                    )
+                                    temp_file = NamedTemporaryFile(
+                                        mode="w+", delete=False
+                                    )
+                                    chunk_number += 1
+                                    games_in_chunk = 0
+                    break
 
-        Returns:
-            bool: True if game should be included, False otherwise
-        """
-        if not raw_game_has_moves(raw_game):
-            return False
+                buffer += chunk
 
-        # Only check ELO requirements if min_elo is specified
-        if self.config.min_elo > 0:
-            try:
-                white_elo = next(
-                    (
-                        int(l.split('"')[1])
-                        for l in raw_game.metadata
-                        if "[WhiteElo" in l and l.split('"')[1].isdigit()
-                    ),
-                    0,
-                )
-                black_elo = next(
-                    (
-                        int(l.split('"')[1])
-                        for l in raw_game.metadata
-                        if "[BlackElo" in l and l.split('"')[1].isdigit()
-                    ),
-                    0,
-                )
+                # Process complete games from buffer
+                for game in self._process_buffer(buffer):
+                    if self._should_keep_game(game):
+                        temp_file.write(f"{game}\n")
+                        games_in_chunk += 1
 
-                if white_elo < self.config.min_elo or black_elo < self.config.min_elo:
-                    return False
-            except (IndexError, ValueError):
-                # If there's any error parsing ELO ratings, skip this game
-                return False
+                        if games_in_chunk >= self.config.chunk_size:
+                            self._upload_chunk(
+                                temp_file, chunk_number, file_id, s3_path
+                            )
+                            temp_file = NamedTemporaryFile(mode="w+", delete=False)
+                            chunk_number += 1
+                            games_in_chunk = 0
 
-        processed_moves = process_chess_moves(raw_game.moves)
+            # Upload final chunk if it contains any games
+            if games_in_chunk > 0:
+                self._upload_chunk(temp_file, chunk_number, file_id, s3_path)
+
+        except Exception as e:
+            logging.error(f"Error processing {s3_path}: {e}")
+            raise
+        finally:
+            if os.path.exists(temp_file.name):
+                os.unlink(temp_file.name)
+
+    def _process_buffer(self, buffer, final=False):
+        """Process the buffer and yield complete games"""
+        lines = buffer.splitlines(True)  # Keep the newlines
+        complete_game_lines = []
+        new_buffer = ""
+
+        for line in lines:
+            if line.strip():  # Non-empty line
+                complete_game_lines.append(line)
+            elif complete_game_lines:  # Empty line after game content
+                game = self._process_game_lines(complete_game_lines)
+                if game:
+                    yield game
+                complete_game_lines = []
+
+        # Handle any remaining complete game at the end
+        if final and complete_game_lines:
+            game = self._process_game_lines(complete_game_lines)
+            if game:
+                yield game
+
+        return new_buffer
+
+    def _process_game_lines(self, lines):
+        """Process a single game's lines and return processed moves if valid"""
+        moves_line = None
+        metadata = []
+
+        for line in lines:
+            line = line.strip()
+            if line.startswith("["):
+                metadata.append(line)
+            elif line and not line.startswith("["):
+                moves_line = line
+                break
+
+        if not moves_line:
+            return None
+
+        try:
+            processed_moves = process_chess_moves(moves_line)
+            return processed_moves if processed_moves else None
+        except Exception as e:
+            logging.warning(f"Error processing game moves: {e}")
+            return None
+
+    def _should_keep_game(self, processed_moves):
+        """Determine if a game should be kept based on configuration"""
         if not processed_moves:
             return False
 
-        if self.config.checkmate_only and not processed_moves.split()[-2].endswith("#"):
+        moves = processed_moves.split()
+        if len(moves) < 2:  # Ensure there are at least a few moves
             return False
+
+        if self.config.checkmate_only:
+            # Check if the second-to-last move ends with #
+            if len(moves) < 2 or not moves[-2].endswith("#"):
+                return False
 
         return True
 
@@ -155,7 +214,7 @@ class S3PGNProcessor:
         """Upload a chunk of processed games to S3"""
         try:
             temp_file.flush()
-            stem = Path(s3_path).stem
+            stem = os.path.splitext(os.path.basename(s3_path))[0]
             output_key = (
                 f"{self.config.output_prefix}/{stem}_{file_id}_chunk{chunk_number}.txt"
             )
@@ -170,49 +229,12 @@ class S3PGNProcessor:
             if os.path.exists(temp_file.name):
                 os.unlink(temp_file.name)
 
-    def process_file(self, s3_path):
-        """Process a single PGN file from S3"""
-        file_id = str(uuid4())
-        chunk_number = 1
-        games_in_chunk = 0
-        temp_file = NamedTemporaryFile(mode="w+", delete=False)
-
-        try:
-            # Download and process PGN file
-            response = self.s3.get_object(Bucket=self.config.input_bucket, Key=s3_path)
-            content = response["Body"].read().decode("utf-8")
-
-            for raw_game in process_raw_games_from_file(content):
-                if not self._should_include_game(raw_game):
-                    continue
-
-                processed_moves = process_chess_moves(raw_game.moves)
-                temp_file.write(f"{processed_moves}\n")
-                games_in_chunk += 1
-
-                if games_in_chunk >= self.config.chunk_size:
-                    self._upload_chunk(temp_file, chunk_number, file_id, s3_path)
-                    temp_file = NamedTemporaryFile(mode="w+", delete=False)
-                    chunk_number += 1
-                    games_in_chunk = 0
-
-            # Upload final chunk if needed
-            if games_in_chunk > 0:
-                self._upload_chunk(temp_file, chunk_number, file_id, s3_path)
-
-        except Exception as e:
-            logging.error(f"Error processing {s3_path}: {e}")
-            raise
-        finally:
-            if os.path.exists(temp_file.name):
-                os.unlink(temp_file.name)
-
 
 def process_pgn_files(config, pgn_paths):
     """Process multiple PGN files with progress tracking"""
-    processor = S3PGNProcessor(config)
+    processor = StreamingPGNProcessor(config)
     for path in tqdm(pgn_paths, desc="Processing PGN files"):
-        processor.process_file(path.strip())
+        processor.stream_pgn_file(path.strip())
 
 
 def tree_command():
@@ -254,6 +276,12 @@ def extract_games_command():
     parser.add_argument(
         "--chunk-size", type=int, default=10000, help="Number of games per output file"
     )
+    parser.add_argument(
+        "--buffer-size",
+        type=int,
+        default=8192,
+        help="Buffer size for streaming (bytes)",
+    )
 
     args = parser.parse_args()
 
@@ -263,6 +291,7 @@ def extract_games_command():
         output_prefix=args.output_prefix,
         min_elo=args.min_elo,
         chunk_size=args.chunk_size,
+        buffer_size=args.buffer_size,
     )
 
     pgn_paths = [line.strip() for line in sys.stdin]
@@ -282,6 +311,12 @@ def extract_checkmates_command():
     parser.add_argument(
         "--chunk-size", type=int, default=10000, help="Number of games per output file"
     )
+    parser.add_argument(
+        "--buffer-size",
+        type=int,
+        default=8192,
+        help="Buffer size for streaming (bytes)",
+    )
 
     args = parser.parse_args()
 
@@ -291,6 +326,7 @@ def extract_checkmates_command():
         output_prefix=args.output_prefix,
         checkmate_only=True,
         chunk_size=args.chunk_size,
+        buffer_size=args.buffer_size,
     )
 
     pgn_paths = [line.strip() for line in sys.stdin]
@@ -298,4 +334,6 @@ def extract_checkmates_command():
 
 
 if __name__ == "__main__":
-    import argparse
+    # This is just here to prevent accidental execution
+    print("This module should be imported and not run directly.")
+    sys.exit(1)
