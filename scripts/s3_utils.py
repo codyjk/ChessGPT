@@ -251,3 +251,92 @@ def process_games_to_s3(
         temp_file.close()
         if os.path.exists(temp_file.name):
             os.unlink(temp_file.name)
+
+
+def extract_games_command():
+    """Implement s3-extract-games-from-pgns command"""
+    parser = argparse.ArgumentParser(description="Extract games from PGN files")
+    parser.add_argument("input_bucket", help="Input S3 bucket name")
+    parser.add_argument(
+        "output_bucket",
+        help="Output S3 bucket and optional directory (e.g., 'my-bucket' or 'my-bucket/my/path')",
+    )
+    parser.add_argument(
+        "--output-prefix",
+        required=True,
+        help="Additional prefix for output files (will be appended to output bucket path)",
+    )
+    parser.add_argument("--min-elo", type=int, help="Minimum ELO rating")
+    parser.add_argument(
+        "--chunk-size", type=int, default=10000, help="Number of games per output file"
+    )
+
+    args = parser.parse_args()
+    s3 = create_s3_client(args.input_bucket)
+
+    # Split bucket and path
+    bucket_parts = args.output_bucket.split("/", 1)
+    output_bucket = bucket_parts[0]
+    base_path = bucket_parts[1] + "/" if len(bucket_parts) > 1 else ""
+
+    # Combine base path with prefix
+    full_prefix = f"{base_path}{args.output_prefix}"
+
+    # Process each PGN file sequentially
+    for pgn_path in sys.stdin:
+        pgn_path = pgn_path.strip()
+        process_games_to_s3(
+            s3,
+            args.input_bucket,
+            output_bucket,
+            pgn_path,
+            full_prefix,
+            args.min_elo,
+            False,
+            args.chunk_size,
+        )
+
+
+def extract_checkmates_command():
+    """Implement s3-extract-checkmates-from-pgns command"""
+    parser = argparse.ArgumentParser(
+        description="Extract checkmate games from PGN files"
+    )
+    parser.add_argument("input_bucket", help="Input S3 bucket name")
+    parser.add_argument(
+        "output_bucket",
+        help="Output S3 bucket and optional directory (e.g., 'my-bucket' or 'my-bucket/my/path')",
+    )
+    parser.add_argument(
+        "--output-prefix",
+        required=True,
+        help="Additional prefix for output files (will be appended to output bucket path)",
+    )
+    parser.add_argument(
+        "--chunk-size", type=int, default=10000, help="Number of games per output file"
+    )
+
+    args = parser.parse_args()
+    s3 = create_s3_client(args.input_bucket)
+
+    # Split bucket and path
+    bucket_parts = args.output_bucket.split("/", 1)
+    output_bucket = bucket_parts[0]
+    base_path = bucket_parts[1] + "/" if len(bucket_parts) > 1 else ""
+
+    # Combine base path with prefix
+    full_prefix = f"{base_path}{args.output_prefix}"
+
+    # Process each PGN file sequentially
+    for pgn_path in sys.stdin:
+        pgn_path = pgn_path.strip()
+        process_games_to_s3(
+            s3,
+            args.input_bucket,
+            output_bucket,
+            pgn_path,
+            full_prefix,
+            None,
+            True,
+            args.chunk_size,
+        )
