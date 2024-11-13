@@ -14,6 +14,7 @@ python = "^3.10"
 tqdm = "^4.66.5"
 boto3 = "^1.35.58"
 botocore = "^1.35.58"
+psutil = "^6.1.0"
 
 [tool.poetry.group.model]
 optional = true
