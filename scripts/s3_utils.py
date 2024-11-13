@@ -4,26 +4,38 @@ import os
 import sys
 import tempfile
 import traceback
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator, Optional
+from tempfile import _TemporaryFileWrapper
+from typing import Dict, Iterator, List, Optional, TextIO, Tuple, Union
 from uuid import uuid4
 
 import boto3
+import psutil
 from botocore.exceptions import ClientError
 from tqdm import tqdm
 
-from pgn_utils import (
-    process_chess_moves,
-    process_raw_games_from_file,
-    raw_game_has_moves,
-)
+from pgn_utils import RawGame, process_chess_moves, raw_game_has_moves
 
+# Set up logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[logging.FileHandler("s3_extract.log"), logging.StreamHandler()],
 )
+
+TempFile = Union[TextIO, _TemporaryFileWrapper[str]]
+
+
+@dataclass
+class ProcessingStats:
+    """Track statistics for the processing job."""
+
+    total_games: int = 0
+    games_in_chunk: int = 0
+    chunk_number: int = 1
+    start_time: datetime = field(default_factory=datetime.now)
 
 
 def create_s3_client(bucket: str):
@@ -37,124 +49,194 @@ def create_s3_client(bucket: str):
     return s3
 
 
-def format_size(size: int) -> str:
-    """Format size in bytes to human readable format."""
-    for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if size < 1024:
-            return f"{size:.1f}{unit}"
-        size = int(size / 1024)
-    raise ValueError
+def get_memory_usage() -> str:
+    """Get current memory usage of the process."""
+    process = psutil.Process()
+    mem_info = process.memory_info()
+    return f"{mem_info.rss / (1024*1024):.2f} MB"
 
 
-def list_bucket_contents(s3, bucket: str, prefix: str = "") -> Iterator[dict]:
-    """List all objects in bucket with given prefix."""
+def list_s3_objects(bucket: str, prefix: str = "") -> Iterator[str]:
+    """List all objects in an S3 bucket with given prefix."""
+    s3 = create_s3_client(bucket)
     paginator = s3.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         if "Contents" in page:
-            yield from page["Contents"]
+            for obj in page["Contents"]:
+                yield obj["Key"]
 
 
-def print_tree(s3, bucket: str, prefix: str = "", indent: str = ""):
-    """Print tree structure of S3 bucket."""
-    objects = list(list_bucket_contents(s3, bucket, prefix))
-
-    for i, obj in enumerate(sorted(objects, key=lambda x: x["Key"])):
-        is_last = i == len(objects) - 1
-        current_indent = indent + ("└── " if is_last else "├── ")
-
-        # Get just the last part of the path
-        name = obj["Key"].split("/")[-1] or obj["Key"]
-        size = format_size(obj["Size"])
-        print(f"{current_indent}{name} ({size})")
-
-        next_indent = indent + ("    " if is_last else "│   ")
-        if obj["Key"].endswith("/"):
-            print_tree(s3, bucket, obj["Key"], next_indent)
+def build_tree(paths: List[str]) -> Dict:
+    """Build a tree structure from a list of paths."""
+    root = {}
+    for path in paths:
+        current = root
+        for part in path.split("/"):
+            if part:
+                current = current.setdefault(part, {})
+    return root
 
 
-def download_and_process_pgn(args: tuple) -> None:
-    """Download and process a single PGN file."""
-    s3, bucket, s3_path, output_dir, min_elo, checkmate_only = args
-
-    local_filename = os.path.join(
-        output_dir, f"{s3_path.replace('/', '_')}.processed.txt"
-    )
-
-    if os.path.exists(local_filename):
+def print_tree(node: Dict, prefix: str = "", is_last: bool = True) -> None:
+    """Print a tree structure."""
+    if not node:
         return
 
-    # Download PGN file
+    items = list(node.items())
+    count = len(items)
+
+    for i, (name, subtree) in enumerate(items):
+        is_last_item = i == count - 1
+        if is_last_item:
+            branch = "└── "
+            new_prefix = prefix + "    "
+        else:
+            branch = "├── "
+            new_prefix = prefix + "│   "
+
+        print(f"{prefix}{branch}{name}")
+        print_tree(subtree, new_prefix, is_last_item)
+
+
+def is_pgn_file(path: str) -> bool:
+    """Check if a file path ends with .pgn"""
+    return path.lower().endswith(".pgn")
+
+
+def upload_chunk(
+    s3: boto3.client,
+    temp_file: TempFile,
+    output_bucket: str,
+    output_prefix: str,
+    s3_path: str,
+    file_id: str,
+    chunk_number: int,
+    games_in_chunk: int,
+) -> None:
+    """Upload a chunk of processed games to S3."""
     try:
-        response = s3.get_object(Bucket=bucket, Key=s3_path)
-        pgn_content = response["Body"].read().decode("utf-8")
-    except ClientError as e:
-        print(f"Error downloading {s3_path}: {e}")
-        return
+        temp_file.flush()
+        stem = Path(s3_path).stem
+        output_key = f"{output_prefix}/{stem}_{file_id}_chunk{chunk_number}.txt"
+        temp_file.seek(0)
+        s3.upload_file(temp_file.name, output_bucket, output_key)
+        logging.info(
+            f"\nUploaded chunk {chunk_number} ({games_in_chunk} games) to {output_key}"
+        )
+    except Exception as e:
+        logging.error(f"Error uploading chunk {chunk_number}:")
+        logging.error(traceback.format_exc())
+        raise
+    finally:
+        temp_file.close()
+        if os.path.exists(temp_file.name):
+            os.unlink(temp_file.name)
 
-    # Process games
-    with open(local_filename, "w") as f:
-        for raw_game in process_raw_games_from_file(pgn_content):
-            # Skip games without enough moves
-            if not raw_game_has_moves(raw_game):
+
+def process_single_game(
+    raw_game: RawGame, min_elo: Optional[int], checkmate_only: bool
+) -> Optional[str]:
+    """Process a single game and return processed moves if game should be included."""
+    try:
+        if not raw_game_has_moves(raw_game):
+            return None
+
+        if min_elo is not None:
+            white_elo = next(
+                (int(l.split('"')[1]) for l in raw_game.metadata if "[WhiteElo" in l),
+                0,
+            )
+            black_elo = next(
+                (int(l.split('"')[1]) for l in raw_game.metadata if "[BlackElo" in l),
+                0,
+            )
+            if white_elo < min_elo or black_elo < min_elo:
+                return None
+
+        processed_moves = process_chess_moves(raw_game.moves)
+        if not processed_moves:
+            return None
+
+        if checkmate_only and not processed_moves.split()[-2].endswith("#"):
+            return None
+
+        return processed_moves
+
+    except Exception as e:
+        logging.error(f"Error processing game: {str(e)}")
+        logging.error(traceback.format_exc())
+        return None
+
+
+def stream_pgn_games(content_stream: Iterator[bytes]) -> Iterator[RawGame]:
+    """Stream PGN games from a byte stream."""
+    buffer = ""
+    current_game_metadata = []
+    current_game_moves = ""
+
+    for chunk in content_stream:
+        buffer += chunk.decode("utf-8")
+        lines = buffer.split("\n")
+
+        # Keep the last line in buffer if it's incomplete
+        buffer = lines[-1]
+        lines = lines[:-1]
+
+        for line in lines:
+            line = line.strip()
+
+            if not line:
+                if current_game_metadata and current_game_moves:
+                    yield RawGame(current_game_metadata, current_game_moves)
+                    current_game_metadata = []
+                    current_game_moves = ""
                 continue
 
-            # Check ELO requirements if specified
-            if min_elo is not None:
-                white_elo = next(
-                    (
-                        int(l.split('"')[1])
-                        for l in raw_game.metadata
-                        if "[WhiteElo" in l
-                    ),
-                    0,
-                )
-                black_elo = next(
-                    (
-                        int(l.split('"')[1])
-                        for l in raw_game.metadata
-                        if "[BlackElo" in l
-                    ),
-                    0,
-                )
-                if white_elo < min_elo or black_elo < min_elo:
-                    continue
+            if line.startswith("["):
+                current_game_metadata.append(line)
+            else:
+                current_game_moves += line + " "
 
-            # Process moves
-            processed_moves = process_chess_moves(raw_game.moves)
+    # Process any remaining content in the buffer
+    if buffer:
+        current_game_moves += buffer
 
-            # Check for checkmate if required
-            if checkmate_only and not processed_moves.split()[-2].endswith("#"):
-                continue
-
-            f.write(f"{processed_moves}\n")
+    # Yield final game if exists
+    if current_game_metadata and current_game_moves:
+        yield RawGame(current_game_metadata, current_game_moves)
 
 
-def tree_command():
-    """Implement s3-tree command."""
-    parser = argparse.ArgumentParser(
-        description="List S3 bucket contents in tree format"
-    )
-    parser.add_argument("bucket", help="S3 bucket name")
-    parser.add_argument("--prefix", help="Optional prefix to start from", default="")
+def maybe_upload_chunk(
+    stats: ProcessingStats,
+    temp_file: TempFile,
+    s3: boto3.client,
+    output_bucket: str,
+    output_prefix: str,
+    s3_path: str,
+    file_id: str,
+    chunk_size: int,
+) -> Tuple[Union[TextIO, _TemporaryFileWrapper], ProcessingStats]:
+    """Upload chunk if needed and return new temp file and updated stats."""
+    if stats.games_in_chunk >= chunk_size:
+        upload_chunk(
+            s3,
+            temp_file,
+            output_bucket,
+            output_prefix,
+            s3_path,
+            file_id,
+            stats.chunk_number,
+            stats.games_in_chunk,
+        )
+        logging.info(
+            f"Memory usage after chunk {stats.chunk_number}: {get_memory_usage()}"
+        )
 
-    args = parser.parse_args()
-    s3 = create_s3_client(args.bucket)
+        stats.chunk_number += 1
+        stats.games_in_chunk = 0
+        return tempfile.NamedTemporaryFile(mode="w+", delete=False), stats
 
-    print(f"{args.bucket}")
-    print_tree(s3, args.bucket, args.prefix)
-
-
-def list_pgns_command():
-    """Implement s3-list-pgns command."""
-    parser = argparse.ArgumentParser(description="List PGN files in S3 bucket")
-    parser.add_argument("bucket", help="S3 bucket name")
-
-    args = parser.parse_args()
-    s3 = create_s3_client(args.bucket)
-
-    for obj in list_bucket_contents(s3, args.bucket):
-        if obj["Key"].lower().endswith(".pgn"):
-            print(obj["Key"])
+    return temp_file, stats
 
 
 def process_games_to_s3(
@@ -169,10 +251,7 @@ def process_games_to_s3(
 ) -> None:
     """Process games from a PGN file and write to S3 in chunks."""
     file_id = str(uuid4())
-    chunk_number = 1
-    games_in_chunk = 0
-    total_games = 0
-    start_time = datetime.now()
+    stats = ProcessingStats()
 
     # Create temp file for current chunk
     temp_file = tempfile.NamedTemporaryFile(mode="w+", delete=False)
@@ -181,115 +260,36 @@ def process_games_to_s3(
         logging.info(f"Starting to process {s3_path}")
         logging.info(f"Memory usage before download: {get_memory_usage()}")
 
-        # Download file with progress tracking
-        response = s3.get_object(Bucket=input_bucket, Key=s3_path)
+        # Get file size without downloading
+        response = s3.head_object(Bucket=input_bucket, Key=s3_path)
         file_size = response["ContentLength"]
         logging.info(f"File size: {file_size / (1024*1024):.2f} MB")
 
-        pgn_content = response["Body"].read().decode("utf-8")
-        logging.info(f"Memory usage after download: {get_memory_usage()}")
+        # Stream and process the file
+        logging.info("Streaming file contents...")
+        response = s3.get_object(Bucket=input_bucket, Key=s3_path)
+        stream = response["Body"].iter_chunks(chunk_size=1024 * 1024)  # 1MB chunks
 
-        # Count total games for progress bar
-        logging.info("Counting games...")
-        game_count = sum(1 for _ in process_raw_games_from_file(pgn_content))
-        logging.info(f"Found {game_count} games")
+        for raw_game in stream_pgn_games(stream):
+            processed_moves = process_single_game(raw_game, min_elo, checkmate_only)
+            if processed_moves:
+                temp_file.write(f"{processed_moves}\n")
+                stats.games_in_chunk += 1
+                stats.total_games += 1
 
-        # Process games with progress bar
-        with tqdm(total=game_count, desc="Processing games", unit="game") as pbar:
-            try:
-                for game_number, raw_game in enumerate(
-                    process_raw_games_from_file(pgn_content), 1
-                ):
-                    try:
-                        if not raw_game_has_moves(raw_game):
-                            pbar.update(1)
-                            continue
+                temp_file, stats = maybe_upload_chunk(
+                    stats,
+                    temp_file,
+                    s3,
+                    output_bucket,
+                    output_prefix,
+                    s3_path,
+                    file_id,
+                    chunk_size,
+                )
 
-                        if min_elo is not None:
-                            # Check ELO from metadata
-                            try:
-                                white_elo = next(
-                                    (
-                                        int(l.split('"')[1])
-                                        for l in raw_game.metadata
-                                        if "[WhiteElo" in l
-                                    ),
-                                    0,
-                                )
-                                black_elo = next(
-                                    (
-                                        int(l.split('"')[1])
-                                        for l in raw_game.metadata
-                                        if "[BlackElo" in l
-                                    ),
-                                    0,
-                                )
-                            except Exception as e:
-                                logging.warning(
-                                    f"Error parsing ELO at game {game_number}: {str(e)}"
-                                )
-                                pbar.update(1)
-                                continue
-
-                            if white_elo < min_elo or black_elo < min_elo:
-                                pbar.update(1)
-                                continue
-
-                        processed_moves = process_chess_moves(raw_game.moves)
-                        if not processed_moves:
-                            pbar.update(1)
-                            continue
-
-                        if checkmate_only and not processed_moves.split()[-2].endswith(
-                            "#"
-                        ):
-                            pbar.update(1)
-                            continue
-
-                        temp_file.write(f"{processed_moves}\n")
-                        games_in_chunk += 1
-                        total_games += 1
-
-                        if games_in_chunk >= chunk_size:
-                            upload_chunk(
-                                s3,
-                                temp_file,
-                                output_bucket,
-                                output_prefix,
-                                s3_path,
-                                file_id,
-                                chunk_number,
-                                games_in_chunk,
-                            )
-                            temp_file = tempfile.NamedTemporaryFile(
-                                mode="w+", delete=False
-                            )
-                            chunk_number += 1
-                            games_in_chunk = 0
-                            logging.info(
-                                f"Memory usage after chunk {chunk_number-1}: {get_memory_usage()}"
-                            )
-
-                        pbar.update(1)
-
-                        # Log progress periodically
-                        if game_number % 50000 == 0:
-                            logging.info(
-                                f"Memory usage at game {game_number}: {get_memory_usage()}"
-                            )
-
-                    except Exception as e:
-                        logging.error(f"Error processing game {game_number}:")
-                        logging.error(traceback.format_exc())
-                        pbar.update(1)
-                        continue
-
-            except Exception as e:
-                logging.error("Error in game processing loop:")
-                logging.error(traceback.format_exc())
-                raise
-
-        if games_in_chunk > 0:
+        # Upload final chunk if needed
+        if stats.games_in_chunk > 0:
             upload_chunk(
                 s3,
                 temp_file,
@@ -297,15 +297,14 @@ def process_games_to_s3(
                 output_prefix,
                 s3_path,
                 file_id,
-                chunk_number,
-                games_in_chunk,
+                stats.chunk_number,
+                stats.games_in_chunk,
             )
 
-        end_time = datetime.now()
-        duration = (end_time - start_time).total_seconds()
-        logging.info(f"Total games processed and uploaded: {total_games}")
+        duration = (datetime.now() - stats.start_time).total_seconds()
+        logging.info(f"Total games processed and uploaded: {stats.total_games}")
         logging.info(f"Processing time: {duration:.2f} seconds")
-        logging.info(f"Processing rate: {total_games/duration:.2f} games/second")
+        logging.info(f"Processing rate: {stats.total_games/duration:.2f} games/second")
         logging.info(f"Final memory usage: {get_memory_usage()}")
 
     except Exception as e:
@@ -322,44 +321,31 @@ def process_games_to_s3(
             logging.error(f"Error cleaning up temp file: {str(e)}")
 
 
-def get_memory_usage() -> str:
-    """Get current memory usage of the process."""
-    import psutil
+def tree_command():
+    """Implement s3-tree command"""
+    parser = argparse.ArgumentParser(description="Display S3 bucket contents as a tree")
+    parser.add_argument("bucket", help="S3 bucket name")
+    parser.add_argument("--prefix", default="", help="Optional prefix to start from")
 
-    process = psutil.Process()
-    mem_info = process.memory_info()
-    return f"{mem_info.rss / (1024*1024):.2f} MB"
+    args = parser.parse_args()
+
+    print(f"{args.bucket}/")
+    paths = list(list_s3_objects(args.bucket, args.prefix))
+    tree = build_tree(paths)
+    print_tree(tree)
 
 
-def upload_chunk(
-    s3: boto3.client,
-    temp_file: tempfile._TemporaryFileWrapper,
-    output_bucket: str,
-    output_prefix: str,
-    s3_path: str,
-    file_id: str,
-    chunk_number: int,
-    games_in_chunk: int,
-) -> None:
-    """Upload a chunk of processed games to S3."""
-    try:
-        temp_file.flush()
-        output_key = (
-            f"{output_prefix}/{Path(s3_path).stem}_{file_id}_chunk{chunk_number}.txt"
-        )
-        temp_file.seek(0)
-        s3.upload_file(temp_file.name, output_bucket, output_key)
-        logging.info(
-            f"\nUploaded chunk {chunk_number} ({games_in_chunk} games) to {output_key}"
-        )
-    except Exception as e:
-        logging.error(f"Error uploading chunk {chunk_number}:")
-        logging.error(traceback.format_exc())
-        raise
-    finally:
-        temp_file.close()
-        if os.path.exists(temp_file.name):
-            os.unlink(temp_file.name)
+def list_pgns_command():
+    """Implement s3-list-pgns command"""
+    parser = argparse.ArgumentParser(description="List all PGN files in an S3 bucket")
+    parser.add_argument("bucket", help="S3 bucket name")
+    parser.add_argument("--prefix", default="", help="Optional prefix to start from")
+
+    args = parser.parse_args()
+
+    for path in list_s3_objects(args.bucket, args.prefix):
+        if is_pgn_file(path):
+            print(path)
 
 
 def extract_games_command():
