@@ -1,3 +1,4 @@
+import argparse
 import logging
 import os
 import sys
@@ -34,6 +35,55 @@ class ProcessingConfig:
     min_elo: int = 0
     checkmate_only: bool = False
     chunk_size: int = 10000
+
+
+def list_s3_objects(bucket, prefix=""):
+    """List all objects in an S3 bucket with given prefix"""
+    s3 = boto3.client("s3")
+    try:
+        s3.head_bucket(Bucket=bucket)
+    except ClientError as e:
+        print(f"Error accessing bucket {bucket}: {e}")
+        sys.exit(1)
+
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        if "Contents" in page:
+            for obj in page["Contents"]:
+                yield obj["Key"]
+
+
+def build_tree(paths):
+    """Build a tree structure from a list of paths"""
+    root = {}
+    for path in paths:
+        current = root
+        for part in path.split("/"):
+            if part:
+                current = current.setdefault(part, {})
+    return root
+
+
+def print_tree(node, prefix="", is_last=True):
+    """Print a tree structure"""
+    if not node:
+        return
+
+    items = list(node.items())
+    count = len(items)
+
+    for i, (name, subtree) in enumerate(items):
+        is_last_item = i == count - 1
+        branch = "└── " if is_last_item else "├── "
+        new_prefix = prefix + "    " if is_last_item else prefix + "│   "
+
+        print(f"{prefix}{branch}{name}")
+        print_tree(subtree, new_prefix, is_last_item)
+
+
+def is_pgn_file(path):
+    """Check if a file path ends with .pgn"""
+    return path.lower().endswith(".pgn")
 
 
 class S3PGNProcessor:
@@ -140,10 +190,35 @@ def process_pgn_files(config, pgn_paths):
         processor.process_file(path.strip())
 
 
+def tree_command():
+    """Display S3 bucket contents as a tree"""
+    parser = argparse.ArgumentParser(description="Display S3 bucket contents as a tree")
+    parser.add_argument("bucket", help="S3 bucket name")
+    parser.add_argument("--prefix", default="", help="Optional prefix to start from")
+
+    args = parser.parse_args()
+
+    print(f"{args.bucket}/")
+    paths = list(list_s3_objects(args.bucket, args.prefix))
+    tree = build_tree(paths)
+    print_tree(tree)
+
+
+def list_pgns_command():
+    """List all PGN files in an S3 bucket"""
+    parser = argparse.ArgumentParser(description="List all PGN files in an S3 bucket")
+    parser.add_argument("bucket", help="S3 bucket name")
+    parser.add_argument("--prefix", default="", help="Optional prefix to start from")
+
+    args = parser.parse_args()
+
+    for path in list_s3_objects(args.bucket, args.prefix):
+        if is_pgn_file(path):
+            print(path)
+
+
 def extract_games_command():
     """Extract games from PGN files"""
-    import argparse
-
     parser = argparse.ArgumentParser(description="Extract games from PGN files")
     parser.add_argument("input_bucket", help="Input S3 bucket name")
     parser.add_argument("output_bucket", help="Output S3 bucket name")
@@ -171,8 +246,6 @@ def extract_games_command():
 
 def extract_checkmates_command():
     """Extract checkmate games from PGN files"""
-    import argparse
-
     parser = argparse.ArgumentParser(
         description="Extract checkmate games from PGN files"
     )
@@ -197,3 +270,7 @@ def extract_checkmates_command():
 
     pgn_paths = [line.strip() for line in sys.stdin]
     process_pgn_files(config, pgn_paths)
+
+
+if __name__ == "__main__":
+    import argparse
