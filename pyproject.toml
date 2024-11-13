@@ -35,10 +35,10 @@ pytest = "^8.3.2"
 
 [tool.poetry.scripts]
 # S3 utilities
-s3-tree = "s3_utils:tree_command"
-s3-list-pgns = "s3_utils:list_pgns_command"
-s3-extract-games-from-pgns = "s3_utils:extract_games_command"
-s3-extract-checkmates-from-pgns = "s3_utils:extract_checkmates_command"
+s3-tree = "scripts.s3_utils:tree_command"
+s3-list-pgns = "scripts.s3_utils:list_pgns_command"
+s3-extract-games-from-pgns = "scripts.s3_utils:extract_games_command"
+s3-extract-checkmates-from-pgns = "scripts.s3_utils:extract_checkmates_command"
 
 # Model-related scripts (these require the model group to be installed)
 reduce-pgn = "scripts.reduce_pgn_to_moves:main"
