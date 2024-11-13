@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 from dataclasses import dataclass
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
@@ -93,13 +94,21 @@ class StreamingPGNProcessor:
         file_id = str(uuid4())
         chunk_number = 1
         games_in_chunk = 0
+        total_games_processed = 0
+        last_progress_update = time.time()
         temp_file = NamedTemporaryFile(mode="w+", delete=False)
 
         try:
             response = self.s3.get_object(Bucket=self.config.input_bucket, Key=s3_path)
             stream = response["Body"]
+            file_size = int(response["ContentLength"])
 
             buffer = ""
+            bytes_processed = 0
+            logging.info(
+                f"Starting to process {s3_path} ({file_size / 1024 / 1024:.2f} MB)"
+            )
+
             while True:
                 chunk = stream.read(self.config.buffer_size).decode("utf-8")
                 if not chunk:
@@ -109,6 +118,7 @@ class StreamingPGNProcessor:
                             if self._should_keep_game(game):
                                 temp_file.write(f"{game}\n")
                                 games_in_chunk += 1
+                                total_games_processed += 1
 
                                 if games_in_chunk >= self.config.chunk_size:
                                     self._upload_chunk(
@@ -121,13 +131,24 @@ class StreamingPGNProcessor:
                                     games_in_chunk = 0
                     break
 
+                bytes_processed += len(chunk.encode("utf-8"))
                 buffer += chunk
+
+                # Log progress every 60 seconds
+                current_time = time.time()
+                if current_time - last_progress_update >= 60:
+                    progress_percent = (bytes_processed / file_size) * 100
+                    logging.info(
+                        f"Progress for {s3_path}: {progress_percent:.2f}% processed, {total_games_processed} checkmate games found"
+                    )
+                    last_progress_update = current_time
 
                 # Process complete games from buffer
                 for game in self._process_buffer(buffer):
                     if self._should_keep_game(game):
                         temp_file.write(f"{game}\n")
                         games_in_chunk += 1
+                        total_games_processed += 1
 
                         if games_in_chunk >= self.config.chunk_size:
                             self._upload_chunk(
@@ -140,6 +161,10 @@ class StreamingPGNProcessor:
             # Upload final chunk if it contains any games
             if games_in_chunk > 0:
                 self._upload_chunk(temp_file, chunk_number, file_id, s3_path)
+
+            logging.info(
+                f"Completed processing {s3_path}. Found {total_games_processed} checkmate games."
+            )
 
         except Exception as e:
             logging.error(f"Error processing {s3_path}: {e}")
