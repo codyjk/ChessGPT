@@ -16,7 +16,7 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
 If you plan to train or use the model (requires GPU):
 
 ```sh
-poetry install
+poetry install --with model
 ```
 
 ### For S3 Data Processing Only (e.g., EC2)
