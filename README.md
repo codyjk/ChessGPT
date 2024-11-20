@@ -321,6 +321,9 @@ poetry run reduce-pgn --input-pgn data/lichess_db_standard_rated_2024-06.pgn --o
 shuf -n 100000 out/master.txt > out/master-trunc.txt
 
 # Prepare the training data
+poetry run prepare-training-data --input-reduced-pgn-file out/master-trunc.txt --output-training-data-file out/training-data.csv --output-validation-data-file out/validation-data.csv --max-context-length 5
+
+# Prepare the tokenizer
 poetry run fit-and-save-tokenizer --input-training-data-file out/training-data.csv
 
 # Train the model. Make sure to use the same max-context-length as above

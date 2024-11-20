@@ -1,10 +1,9 @@
 import argparse
 import os
-import sys
+import re
 from collections import defaultdict
 
-from chess_model.util import (
-    get_elo_directory,
+from pgn_utils.pgn_utils import (
     process_chess_moves,
     process_raw_games_from_file,
     raw_game_has_moves,
@@ -19,6 +18,30 @@ DIRECTORY_TO_ELO_RATING_RANGE = {
     "grandmaster": (2500, INFINITY),
     "unknown": (INFINITY, INFINITY),
 }
+
+WHITE_ELO_PATTERN = re.compile(r'^\s*\[WhiteElo "(\d+)"\]\s*$')
+BLACK_ELO_PATTERN = re.compile(r'^\s*\[BlackElo "(\d+)"\]\s*$')
+
+
+# The metadata contains [WhiteElo "1250"] and [BlackElo "1750"].
+# Take the max, then find the elo range that contains it.
+def get_elo_directory(raw_game, elo_directory_to_rating_range_dict):
+    white_elo = None
+    black_elo = None
+    for metadata_line in raw_game.metadata:
+        if WHITE_ELO_PATTERN.search(metadata_line):
+            white_elo = WHITE_ELO_PATTERN.search(metadata_line)
+        elif BLACK_ELO_PATTERN.search(metadata_line):
+            black_elo = BLACK_ELO_PATTERN.search(metadata_line)
+    if not white_elo or not black_elo:
+        return "unknown"
+    white_elo = int(white_elo.group(1))
+    black_elo = int(black_elo.group(1))
+    target_elo = max(white_elo, black_elo)
+    for directory, (min_elo, max_elo) in elo_directory_to_rating_range_dict.items():
+        if min_elo < target_elo <= max_elo:
+            return directory
+    return "unknown"
 
 
 def main():

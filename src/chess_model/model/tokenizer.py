@@ -1,10 +1,8 @@
 import json
-import mmap
-import os
 
 from tqdm import tqdm
 
-from chess_model.util import count_lines_fast
+from pgn_utils.count_lines import count_lines_fast
 
 PAD_TOKEN = "[PAD]"
 UNK_TOKEN = "[UNK]"

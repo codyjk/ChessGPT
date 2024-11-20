@@ -1,6 +1,10 @@
 import re
 from typing import Iterator, List, NamedTuple
 
+from tqdm import tqdm
+
+from .count_lines import count_lines_fast
+
 
 class RawGame(NamedTuple):
     metadata: List[str]
@@ -47,19 +51,18 @@ def raw_game_has_moves(raw_game: RawGame, min_moves: int = 2) -> bool:
     return len(moves) >= min_moves and bool(OUTCOME_PATTERN.search(outcome))
 
 
-def process_raw_games_from_file(content: str) -> Iterator[RawGame]:
+def process_raw_games_from_file(filename: str) -> Iterator[RawGame]:
     """Process PGN content and yield RawGame objects."""
     current_metadata = []
-
-    for line in content.splitlines():
-        if not line.strip():
-            continue
-
-        if is_metadata_line(line):
-            current_metadata.append(line)
-            continue
-
-        if is_moves_line(line):
-            yield RawGame(current_metadata, line)
-            current_metadata = []
-            continue
+    total_lines = count_lines_fast(filename)
+    with open(filename, "r") as file:
+        for line in tqdm(file, total=total_lines, desc="Processing PGN"):
+            if line == "":
+                continue
+            if is_metadata_line(line):
+                current_metadata.append(line)
+                continue
+            if is_moves_line(line):
+                yield RawGame(current_metadata, line)
+                current_metadata = []
+                continue

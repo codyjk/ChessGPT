@@ -3,7 +3,7 @@ import random
 
 from tqdm import tqdm
 
-from .count_lines import count_lines_fast
+from pgn_utils.count_lines import count_lines_fast
 
 
 def process_game(game, max_context_length):
