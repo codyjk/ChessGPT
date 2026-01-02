@@ -1,0 +1,9 @@
+# Test 5K: 5,000 examples, 1 epoch, ~24 minutes
+name: test_5k
+description: Scaling test - 5K examples (24 min expected)
+
+model: gpt2_medium
+training: micro_test  # Reuse micro test training config
+data: test_5k
+
+expected_training_time: 24min

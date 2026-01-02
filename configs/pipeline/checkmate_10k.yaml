@@ -1,0 +1,10 @@
+# Checkmate-focused 10K training
+name: checkmate_10k
+description: 10K games with 58% checkmate focus (validation test)
+
+model: gpt2_medium
+training: micro_test  # Fast config: bs=2, ga=1
+data: checkmate_10k
+
+expected_training_time: 40min
+purpose: Validate checkmate-focused training approach

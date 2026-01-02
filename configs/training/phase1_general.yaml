@@ -5,8 +5,8 @@ phase: 1
 
 # Training params
 num_epochs: 8
-batch_size: 64
-gradient_accumulation_steps: 2  # Effective batch size: 128
+batch_size: 4  # Small for M1 Mac (20GB MPS limit)
+gradient_accumulation_steps: 32  # Effective batch size: 128
 
 # Learning rate
 learning_rate: 3e-4
@@ -19,7 +19,7 @@ gradient_clip_norm: 1.0
 
 # Mixed precision
 mixed_precision: bf16
-gradient_checkpointing: true
+gradient_checkpointing: false  # TODO: ChessTransformer doesn't support this yet
 
 # Checkpointing
 save_steps: 0  # Save per epoch
@@ -32,8 +32,7 @@ metric_for_best_model: eval_loss
 
 # Logging
 logging_steps: 10
-report_to:
-  - wandb
+# report_to: None  # Disable all integrations (can be overridden by WANDB_MODE env var)
 
 # Data mixing
 checkmate_ratio: 0.05    # 5% checkmate examples

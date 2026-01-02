@@ -1,0 +1,18 @@
+# Pipeline config: GPT-2 Medium Phase 1
+# General chess understanding with 95% regular + 5% checkmate games
+# Expected: ~70 hours on M1/M2 Mac
+
+name: phase1_gpt2_medium
+description: Phase 1 - General chess understanding (8 epochs, 175K games)
+
+# Component references
+model: gpt2_medium
+training: phase1_general
+data: phase1_data
+
+# Metadata
+expected_training_time: 70h
+target_metrics:
+  eval_loss: "<1.0"
+  move_accuracy: ">0.55"
+  legal_move_rate: ">0.95"

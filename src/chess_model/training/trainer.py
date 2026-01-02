@@ -25,6 +25,7 @@ class ChessTrainer(Trainer):
         model,
         inputs,
         return_outputs: bool = False,
+        num_items_in_batch=None,  # New parameter in transformers 4.46+
     ) -> Union[torch.Tensor, tuple]:
         """
         Compute loss with outcome-based masking and sample weighting.
@@ -212,6 +213,10 @@ def create_training_args(config) -> TrainingArguments:
     Returns:
         TrainingArguments instance
     """
+    # Determine strategies based on steps configuration
+    eval_strategy = "steps" if config.get("eval_steps", 0) > 0 else "epoch"
+    save_strategy = "steps" if config.get("save_steps", 0) > 0 else "epoch"
+
     return TrainingArguments(
         output_dir=config.get("output_dir", "outputs/training"),
         num_train_epochs=config.get("num_epochs", 8),
@@ -228,14 +233,15 @@ def create_training_args(config) -> TrainingArguments:
         gradient_checkpointing=config.get("gradient_checkpointing", True),
         # Logging and saving
         logging_steps=config.get("logging_steps", 10),
-        save_steps=config.get("save_steps", 500),
+        save_strategy=save_strategy,
+        save_steps=config.get("save_steps") if save_strategy == "steps" else None,
         save_total_limit=config.get("save_total_limit", 3),
-        evaluation_strategy="steps" if config.get("eval_steps", 0) > 0 else "epoch",
-        eval_steps=config.get("eval_steps") if config.get("eval_steps", 0) > 0 else None,
+        evaluation_strategy=eval_strategy,
+        eval_steps=config.get("eval_steps") if eval_strategy == "steps" else None,
         load_best_model_at_end=config.get("load_best_model_at_end", True),
         metric_for_best_model=config.get("metric_for_best_model", "eval_loss"),
         # Reporting
-        report_to=config.get("report_to", ["wandb"]),
+        report_to=config.get("report_to") if config.get("report_to") is not None else None,
         # Misc
         dataloader_num_workers=0,  # Single worker for stability
         remove_unused_columns=False,  # Keep all columns including move_mask

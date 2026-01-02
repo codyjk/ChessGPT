@@ -1,0 +1,22 @@
+# Pipeline config: GPT-2 Medium Phase 2
+# Checkmate specialization with 70% checkmate + 30% regular games
+# Expected: ~10 hours on M1/M2 Mac
+
+name: phase2_gpt2_medium_checkmate
+description: Phase 2 - Checkmate specialization (4 epochs, 175K games)
+
+# Component references
+model: gpt2_medium
+training: phase2_checkmate
+data: phase2_data
+
+# Resume from Phase 1
+resume_from: models/gpt2-medium-v1-phase1/checkpoint-best
+
+# Metadata
+expected_training_time: 10h
+target_metrics:
+  checkmate_delivery_rate: >0.70
+  mate_in_1_accuracy: >0.70
+  mate_in_2_accuracy: >0.40
+  legal_move_rate: >0.95

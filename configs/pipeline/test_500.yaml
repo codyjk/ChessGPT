@@ -1,0 +1,9 @@
+# Test 500: 500 examples, 1 epoch, ~2.5 minutes
+name: test_500
+description: Scaling test - 500 examples (2.5 min expected)
+
+model: gpt2_medium
+training: micro_test  # Reuse micro test training config
+data: test_500
+
+expected_training_time: 2.5min

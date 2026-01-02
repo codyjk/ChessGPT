@@ -1,0 +1,15 @@
+# Data configuration for Phase 1 training
+# 95% regular games + 5% checkmate games
+
+# Data paths
+training_data_path: data/phase_splits/training_phase1.csv
+validation_data_path: data/phase_splits/validation_phase1.csv
+tokenizer_path: out/chess_tokenizer.json
+
+# Data processing
+max_context_length: 100  # Increased for GPT-2 Medium
+validation_split: 0.1
+
+# Data mixing (matches phase1_general.yaml)
+use_mixed_dataset: true
+checkmate_ratio: 0.05

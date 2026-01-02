@@ -1,0 +1,5 @@
+# Micro test: 100 examples for 1-2 min validation
+training_data_path: data/phase_splits/training_micro_100.csv
+validation_data_path: data/phase_splits/validation_micro_20.csv
+tokenizer_path: out/chess_tokenizer.json
+max_context_length: 100

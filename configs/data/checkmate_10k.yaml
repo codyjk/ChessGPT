@@ -1,0 +1,5 @@
+# Checkmate-focused 10K dataset (58% checkmate games)
+training_data_path: data/checkmate_tests/training_checkmate_10k.csv
+validation_data_path: data/checkmate_tests/validation_checkmate_10k.csv
+tokenizer_path: out/chess_tokenizer.json
+max_context_length: 100

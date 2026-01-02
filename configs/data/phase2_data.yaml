@@ -1,0 +1,15 @@
+# Data configuration for Phase 2 training
+# 70% checkmate games + 30% regular games
+
+# Data paths
+training_data_path: data/phase_splits/training_phase2.csv
+validation_data_path: data/phase_splits/validation_phase2.csv
+tokenizer_path: out/chess_tokenizer.json
+
+# Data processing
+max_context_length: 100
+validation_split: 0.1
+
+# Data mixing (matches phase2_checkmate.yaml)
+use_mixed_dataset: true
+checkmate_ratio: 0.70

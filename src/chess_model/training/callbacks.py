@@ -1,8 +1,12 @@
 """Custom training callbacks for ChessGPT."""
 
-from typing import Dict, Optional
+from typing import Dict, Optional, List
+import torch
+import chess
 
 from transformers import TrainerCallback, TrainerControl, TrainerState, TrainingArguments
+
+from ..evaluation.metrics import ChessMetrics
 
 
 class CheckmateMetricsCallback(TrainerCallback):
@@ -221,6 +225,79 @@ class EarlyStoppingCallback(TrainerCallback):
                 f"for {self.early_stopping_patience} evaluations."
             )
             control.should_training_stop = True
+
+
+class LegalMoveCallback(TrainerCallback):
+    """
+    Track legal move rate during training.
+
+    Periodically samples positions and checks if model predictions are legal moves.
+    This is a critical safety metric to ensure the model learns valid chess.
+    """
+
+    def __init__(
+        self,
+        tokenizer,
+        eval_every_n_steps: int = 500,
+        num_samples: int = 100,
+    ):
+        """
+        Initialize legal move callback.
+
+        Args:
+            tokenizer: Chess tokenizer
+            eval_every_n_steps: Evaluate every N training steps
+            num_samples: Number of positions to sample
+        """
+        self.tokenizer = tokenizer
+        self.eval_every_n_steps = eval_every_n_steps
+        self.num_samples = num_samples
+        self.legal_move_history = []
+
+    def on_step_end(
+        self,
+        args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
+        model=None,
+        **kwargs,
+    ):
+        """
+        Evaluate legal move rate periodically.
+
+        Args:
+            args: Training arguments
+            state: Current trainer state
+            control: Trainer control
+            model: Current model
+        """
+        if state.global_step % self.eval_every_n_steps == 0 and model is not None:
+            # Sample random positions and evaluate
+            # For now, just log that we would evaluate
+            # Full implementation would require access to validation data
+            print(f"\n[Legal Move Check at step {state.global_step}]")
+            print("Legal move rate tracking: Not implemented yet")
+            # TODO: Implement sampling and evaluation
+            # legal_rate = self._evaluate_legal_moves(model)
+            # self.legal_move_history.append((state.global_step, legal_rate))
+            # print(f"Legal move rate: {legal_rate:.2%}")
+
+    def _evaluate_legal_moves(self, model) -> float:
+        """
+        Evaluate legal move rate on sample positions.
+
+        Args:
+            model: Model to evaluate
+
+        Returns:
+            Legal move rate (0-1)
+        """
+        # TODO: Implement
+        # 1. Sample positions from validation set
+        # 2. Get model predictions
+        # 3. Check if predictions are legal
+        # 4. Return rate
+        return 0.95  # Placeholder
 
 
 class ProgressCallback(TrainerCallback):

@@ -1,0 +1,27 @@
+# GPT-2 Medium configuration for ChessGPT Phase 2
+# 345M parameters - 500x larger than current tiny model (630K)
+# Expected performance: 1400-1600 Elo with checkmate-seeking
+
+architecture: gpt2
+base_model_name: gpt2-medium  # HuggingFace pretrained model
+max_context_length: 100  # Increased from 50 for longer game sequences
+
+# GPT-2 Medium standard params
+# These match the official gpt2-medium architecture
+num_embeddings: 1024  # n_embd in HuggingFace
+num_layers: 24        # n_layer in HuggingFace
+num_heads: 16         # n_head in HuggingFace
+
+# No LoRA needed for GPT-2 (full fine-tuning is feasible)
+use_lora: false
+
+# Training optimizations for M1/M2 Mac (16GB RAM)
+use_gradient_checkpointing: true  # Essential - saves memory
+use_bf16: true                    # M1/M2 supports bfloat16 natively
+use_fp16: false                   # Don't use fp16 on M1/M2
+
+# Memory estimate with these settings:
+# - Model weights (bf16): ~1.3GB
+# - Gradients + optimizer: ~2.6GB
+# - Activations (with checkpointing): ~2GB
+# Total: ~6GB (comfortable on 16GB unified memory)

@@ -1,6 +1,45 @@
+# Large data files
 *.pgn
 *.pgn.zst
 *.txt
-*.ipynb_checkpoints/
+*.csv
+
+# Output directories
 out/*
+data/phase_splits/
+outputs/
+models/
+trained_models/*
+
+# Keep directory structure but ignore contents
+!trained_models/.gitkeep
+!models/.gitkeep
+!data/.gitkeep
+
+# Python
+*.ipynb_checkpoints/
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Model files
+*.pth
+*.pt
+*.bin
+*.safetensors
+
+# Logs
+*.log
+wandb/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

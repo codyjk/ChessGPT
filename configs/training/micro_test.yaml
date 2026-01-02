@@ -1,0 +1,34 @@
+# Micro test: 1 epoch, minimal batch size
+# Target: 1-2 minutes on M1 MPS
+
+phase: test
+
+# Training params
+num_epochs: 1
+batch_size: 2  # Minimal batch size
+gradient_accumulation_steps: 1  # No accumulation for speed
+
+# Learning rate
+learning_rate: 3e-4
+warmup_steps: 5  # Minimal warmup
+lr_scheduler: cosine
+
+# Regularization
+weight_decay: 0.01
+gradient_clip_norm: 1.0
+
+# Mixed precision
+mixed_precision: bf16
+gradient_checkpointing: false
+
+# Checkpointing - disabled for speed
+save_steps: 0  # Don't save during training
+save_total_limit: 1
+load_best_model_at_end: false  # Skip for speed
+
+# Evaluation
+eval_steps: 0  # Evaluate only at end
+metric_for_best_model: eval_loss
+
+# Logging
+logging_steps: 5  # Log frequently to see progress

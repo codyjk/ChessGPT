@@ -1,0 +1,5 @@
+# Test 500: 500 examples for scaling validation
+training_data_path: data/phase_splits/training_500.csv
+validation_data_path: data/phase_splits/validation_500.csv
+tokenizer_path: out/chess_tokenizer.json
+max_context_length: 100

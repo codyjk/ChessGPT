@@ -1,8 +1,10 @@
 """Chess-specific evaluation metrics."""
 
-from typing import List
+from typing import List, Optional, Tuple
 import torch
 import chess
+
+from .checkmate_analysis import find_mate_in_one, find_mate_in_two, analyze_position
 
 
 class ChessMetrics:
@@ -134,6 +136,89 @@ class ChessMetrics:
 
         # Perplexity is exp(loss)
         return torch.exp(masked_loss).item()
+
+    @staticmethod
+    def checkmate_delivery_rate(
+        predictions: List[str],
+        board_states: List[chess.Board],
+        mate_types: Optional[List[int]] = None,
+    ) -> dict:
+        """
+        Calculate checkmate delivery rate - percentage of mate puzzles solved.
+
+        Args:
+            predictions: List of predicted moves in SAN notation
+            board_states: List of corresponding board states
+            mate_types: Optional list of mate types (1 for mate-in-1, 2 for mate-in-2, etc.)
+
+        Returns:
+            Dictionary with delivery rates by mate type:
+            {
+                'overall_rate': float,
+                'mate_in_1_rate': float,
+                'mate_in_2_rate': float,
+                'mate_in_1_count': int,
+                'mate_in_2_count': int,
+                'total_positions': int,
+            }
+        """
+        if len(predictions) == 0 or len(board_states) == 0:
+            return {
+                'overall_rate': 0.0,
+                'mate_in_1_rate': 0.0,
+                'mate_in_2_rate': 0.0,
+                'mate_in_1_count': 0,
+                'mate_in_2_count': 0,
+                'total_positions': 0,
+            }
+
+        mate_in_1_correct = 0
+        mate_in_1_total = 0
+        mate_in_2_correct = 0
+        mate_in_2_total = 0
+        overall_correct = 0
+
+        for i, (pred_move, board) in enumerate(zip(predictions, board_states)):
+            # Analyze position to determine mate type
+            analysis = analyze_position(board)
+
+            if analysis['mate_in_1']:
+                mate_in_1_total += 1
+                # Check if prediction matches mate-in-1 move
+                try:
+                    pred_parsed = board.parse_san(pred_move)
+                    if pred_parsed == analysis['mate_in_1']:
+                        mate_in_1_correct += 1
+                        overall_correct += 1
+                except (ValueError, AssertionError):
+                    pass
+
+            elif analysis['mate_in_2']:
+                mate_in_2_total += 1
+                # Check if prediction matches mate-in-2 first move
+                try:
+                    pred_parsed = board.parse_san(pred_move)
+                    if pred_parsed == analysis['mate_in_2']:
+                        mate_in_2_correct += 1
+                        overall_correct += 1
+                except (ValueError, AssertionError):
+                    pass
+
+        # Calculate rates
+        overall_rate = overall_correct / len(predictions) if len(predictions) > 0 else 0.0
+        mate_in_1_rate = mate_in_1_correct / mate_in_1_total if mate_in_1_total > 0 else 0.0
+        mate_in_2_rate = mate_in_2_correct / mate_in_2_total if mate_in_2_total > 0 else 0.0
+
+        return {
+            'overall_rate': overall_rate,
+            'mate_in_1_rate': mate_in_1_rate,
+            'mate_in_2_rate': mate_in_2_rate,
+            'mate_in_1_correct': mate_in_1_correct,
+            'mate_in_1_total': mate_in_1_total,
+            'mate_in_2_correct': mate_in_2_correct,
+            'mate_in_2_total': mate_in_2_total,
+            'total_positions': len(predictions),
+        }
 
     @staticmethod
     def batch_metrics(

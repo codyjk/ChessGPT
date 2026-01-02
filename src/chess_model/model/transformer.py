@@ -18,7 +18,18 @@ class ChessTransformer(nn.Module):
         self.transformer = GPT2Model(self.config)
         self.next_move_head = nn.Linear(n_embd, vocab_size)
 
-    def forward(self, input_ids, attention_mask=None):
+    def forward(self, input_ids, attention_mask=None, labels=None):
+        """
+        Forward pass through the model.
+
+        Args:
+            input_ids: Token IDs [batch_size, seq_len]
+            attention_mask: Attention mask [batch_size, seq_len]
+            labels: Labels for loss computation (ignored, handled by Trainer)
+
+        Returns:
+            Logits tensor [batch_size, seq_len, vocab_size]
+        """
         outputs = self.transformer(input_ids, attention_mask=attention_mask)
         hidden_states = outputs.last_hidden_state
         next_move_logits = self.next_move_head(hidden_states)

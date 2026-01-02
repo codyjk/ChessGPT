@@ -1,0 +1,38 @@
+# Test training config: 1 epoch sanity check
+
+phase: test
+
+# Training params
+num_epochs: 1
+batch_size: 4  # Small for testing
+gradient_accumulation_steps: 16  # Effective batch: 64
+
+# Learning rate
+learning_rate: 3e-4
+warmup_steps: 50
+lr_scheduler: cosine
+
+# Regularization
+weight_decay: 0.01
+gradient_clip_norm: 1.0
+
+# Mixed precision (essential for GPT-2 Medium)
+mixed_precision: bf16
+gradient_checkpointing: false  # TODO: ChessTransformer doesn't support this yet
+
+# Checkpointing
+save_steps: 100
+save_total_limit: 2
+load_best_model_at_end: true
+
+# Evaluation
+eval_steps: 50
+metric_for_best_model: eval_loss
+
+# Logging
+logging_steps: 10
+# report_to not specified - disables all integrations for test
+
+# Data mixing
+checkmate_ratio: 0.05
+checkmate_weight: 1.0

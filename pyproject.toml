@@ -29,9 +29,9 @@ torch = "^2.4.0"
 hydra-core = "^1.3.0"
 pydantic = "^2.5.0"
 omegaconf = "^2.3.0"
-wandb = "^0.16.0"
+wandb = "^0.18.0"  # Updated for numpy 2.0 compatibility
 peft = "^0.7.0"
-accelerate = "^0.25.0"
+accelerate = "^0.26.0"
 click = "^8.1.0"
 zstandard = "^0.22.0"
 
@@ -52,6 +52,8 @@ s3-extract-checkmates-from-pgns = "scripts.s3_utils:extract_checkmates_command"
 
 # ChessGPT 2026 - New unified CLI
 chessgpt = "scripts.chessgpt:cli"
+train = "scripts.train:main"
+models = "scripts.models:main"
 
 # Legacy scripts (deprecated, will be removed)
 reduce-pgn = "scripts.reduce_pgn_to_moves:main"

@@ -1,0 +1,14 @@
+# Micro test pipeline: 100 examples, 1 epoch, ~1-2 minutes
+# Purpose: Verify MPS + architecture works before scaling up
+
+name: micro_test_gpt2_medium
+description: Micro test - 100 examples to verify MPS works (1-2 min)
+
+# Component references
+model: gpt2_medium
+training: micro_test
+data: micro_test
+
+# Metadata
+expected_training_time: 1-2min
+purpose: Verify MPS acceleration and model architecture

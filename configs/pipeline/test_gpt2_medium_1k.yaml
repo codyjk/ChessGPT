@@ -1,0 +1,10 @@
+# Pipeline config: GPT-2 Medium 1K game sanity check
+# Quick validation of full training pipeline
+
+name: gpt2_medium_test_1k
+description: 1 epoch on 1K games to validate pipeline
+
+# Component references
+model: gpt2_medium
+training: test_1epoch
+data: test_1k
