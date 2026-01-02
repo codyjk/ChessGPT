@@ -1,0 +1,13 @@
+# Quick test GPT-2 configuration
+# Very small model for rapid testing
+
+architecture: gpt2
+max_context_length: 10  # Match data config
+
+# Small model for quick testing
+num_embeddings: 256  # Reduced from 512
+num_layers: 3  # Reduced from 6
+num_heads: 4  # Reduced from 8
+
+# LoRA not used for GPT-2
+use_lora: false

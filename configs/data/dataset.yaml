@@ -1,13 +1,13 @@
 # Data configuration for ChessGPT 2026
 
 # Data paths (relative to project root)
-training_data_path: data/general_games_training.csv
-checkmate_data_path: data/checkmate_games_training.csv
-validation_data_path: data/validation.csv
-tokenizer_path: data/chess_tokenizer.json
+training_data_path: data/quick_sample/training-data.csv
+checkmate_data_path: data/checkmate_games_training.csv  # Not used for quick test
+validation_data_path: data/quick_sample/validation-data.csv
+tokenizer_path: trained_models/tokenizer.json
 
 # Data processing
-max_context_length: 100
+max_context_length: 10  # Short context for quick test (6 moves max)
 validation_split: 0.1
 
 # Data mixing

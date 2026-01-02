@@ -79,19 +79,32 @@ class ChessDataset(Dataset):
         # For draws, we want the model to learn from both moves.
         # We will produce a mask that masks out the moves for the losing player,
         # and the model will learn from the remaining moves.
-        move_mask = torch.ones(self.max_context_length, dtype=torch.float)
 
-        if outcome == "1-0":  # White won
-            # Mask out odd-indexed moves (Black's moves)
-            move_mask[1::2] = 0
-        elif outcome == "0-1":  # Black won
-            # Mask out even-indexed moves (White's moves)
-            move_mask[::2] = 0
-        # For draws (1/2-1/2), keep all moves (mask stays 1)
+        # Start with zeros (mask out everything)
+        move_mask = torch.zeros(self.max_context_length, dtype=torch.float)
 
-        # If the context is shorter than max_context_length, zero-out that part of the mask
-        if len(context) < self.max_context_length:
-            move_mask[len(context) :] = 0
+        # Calculate where actual data starts after left-padding
+        # labels = context[1:] + [last_move], so labels has same length as context
+        num_actual_moves = len(context)
+        padding_length = self.max_context_length - num_actual_moves
+
+        # Apply masking only to non-padding positions based on ORIGINAL move indices
+        # labels[i] corresponds to the (i+1)th move in the original game
+        # (because labels = context[1:] + [last_move], which shifts by 1)
+        for i in range(num_actual_moves):
+            padded_position = padding_length + i
+            original_move_index = i + 1  # The move index in the original game
+
+            # Determine if this move should be kept based on outcome
+            # Move indices: 0=White, 1=Black, 2=White, 3=Black, ...
+            if outcome == "1-0":  # White won, keep White moves (even indices)
+                if original_move_index % 2 == 0:
+                    move_mask[padded_position] = 1
+            elif outcome == "0-1":  # Black won, keep Black moves (odd indices)
+                if original_move_index % 2 == 1:
+                    move_mask[padded_position] = 1
+            elif outcome == "1/2-1/2":  # Draw, keep all moves
+                move_mask[padded_position] = 1
 
         # Convert outcome to one-hot encoding (as float)
         outcome_label = torch.zeros(3, dtype=torch.float)
