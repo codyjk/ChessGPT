@@ -1,0 +1,55 @@
+# Full training pipeline configuration
+
+name: chessgpt_2026_full
+output_dir: outputs/full_training
+
+# Auto-download PGN data
+auto_download: true
+pgn_sources:
+  - url: https://database.lichess.org/standard/lichess_db_standard_rated_2024-12.pgn.zst
+    min_elo: 1800
+    max_games: 5000000
+  - url: https://database.lichess.org/lichess_db_puzzle.csv.zst
+    filter: checkmate_only
+    max_puzzles: 500000
+
+# Component configs
+model:
+  architecture: llama
+  base_model_name: meta-llama/Llama-3.2-1B
+  max_context_length: 100
+  use_lora: true
+  lora_config:
+    r: 16
+    lora_alpha: 32
+    target_modules: [q_proj, v_proj, k_proj, o_proj]
+    lora_dropout: 0.05
+
+data:
+  training_data_path: data/processed/general_games_training.csv
+  checkmate_data_path: data/processed/checkmate_games_training.csv
+  validation_data_path: data/processed/validation.csv
+  tokenizer_path: data/processed/chess_tokenizer.json
+  max_context_length: 100
+  validation_split: 0.1
+
+training_phase1:
+  phase: 1
+  num_epochs: 8
+  batch_size: 64
+  learning_rate: 3e-4
+  checkmate_ratio: 0.05
+  checkmate_weight: 1.0
+
+training_phase2:
+  phase: 2
+  num_epochs: 4
+  batch_size: 64
+  learning_rate: 1e-5
+  checkmate_ratio: 0.70
+  checkmate_weight: 2.0
+  resume_from: outputs/phase1/checkpoint-best
+
+# Evaluation
+run_full_eval: true
+test_set_path: data/test/grandmaster_test.csv

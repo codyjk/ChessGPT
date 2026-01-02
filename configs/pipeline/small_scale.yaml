@@ -1,0 +1,52 @@
+# Small-scale training pipeline configuration
+# For initial validation with 100K games, 5-6 moves each
+# Expected training time: ~2-3 hours on M1/M2 Mac
+
+name: chessgpt_small_scale
+output_dir: outputs/small_scale
+
+# Source data
+source_pgn: lichess_db_standard_rated_2016-04.pgn.zst
+max_games: 100000
+max_moves_per_game: 6
+min_elo: 1800
+
+# Processing
+auto_download: false  # Using local file
+
+# Component configs
+model:
+  architecture: gpt2  # Use GPT-2 for quick validation
+  base_model_name: gpt2
+  max_context_length: 10  # Short games only
+  num_embeddings: 256
+  num_layers: 4
+  num_heads: 4
+  use_lora: false
+
+data:
+  training_data_path: data/processed/small_scale/training.csv
+  checkmate_data_path: null  # No checkmate data for initial test
+  validation_data_path: data/processed/small_scale/validation.csv
+  tokenizer_path: data/processed/small_scale/tokenizer.json
+  max_context_length: 10
+  validation_split: 0.1
+  use_mixed_dataset: false  # No checkmate mixing for initial test
+
+training_phase1:
+  phase: 1
+  num_epochs: 5  # Fewer epochs for quick training
+  batch_size: 128
+  learning_rate: 3e-4
+  checkmate_ratio: 0.0  # No checkmate data
+  mixed_precision: bf16
+
+# Skip Phase 2 for small-scale validation
+skip_phase2: true
+
+# Evaluation
+run_full_eval: true
+expected_metrics:
+  move_accuracy: 0.4-0.6  # Opening moves only
+  legal_move_rate: 0.9+   # Should be high for openings
+  top5_accuracy: 0.7+     # Good opening diversity

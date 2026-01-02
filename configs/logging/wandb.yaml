@@ -1,0 +1,26 @@
+# Weights & Biases logging configuration
+
+project: chessgpt-2026
+entity: null  # Set to your W&B username/team
+
+# Run configuration
+tags:
+  - llama-3.2-1b
+  - lora
+  - checkmate-training
+
+# Logging settings
+log_model: true
+log_code: true
+log_graphs: false
+
+# Metrics to track
+metrics:
+  - train_loss
+  - eval_loss
+  - move_accuracy
+  - top5_accuracy
+  - legal_move_rate
+  - checkmate_delivery_rate
+  - learning_rate
+  - grad_norm

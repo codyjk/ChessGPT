@@ -1,0 +1,40 @@
+# Phase 1: General Chess Understanding
+# Train on 95% regular games + 5% checkmate games
+
+phase: 1
+
+# Training params
+num_epochs: 8
+batch_size: 64
+gradient_accumulation_steps: 2  # Effective batch size: 128
+
+# Learning rate
+learning_rate: 3e-4
+warmup_steps: 1000
+lr_scheduler: cosine
+
+# Regularization
+weight_decay: 0.01
+gradient_clip_norm: 1.0
+
+# Mixed precision
+mixed_precision: bf16
+gradient_checkpointing: true
+
+# Checkpointing
+save_steps: 0  # Save per epoch
+save_total_limit: 3
+load_best_model_at_end: true
+
+# Evaluation
+eval_steps: 0  # Evaluate per epoch
+metric_for_best_model: eval_loss
+
+# Logging
+logging_steps: 10
+report_to:
+  - wandb
+
+# Data mixing
+checkmate_ratio: 0.05    # 5% checkmate examples
+checkmate_weight: 1.0    # Equal weighting

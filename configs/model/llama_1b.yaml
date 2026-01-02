@@ -1,0 +1,21 @@
+# Llama 3.2 1B configuration for ChessGPT 2026
+
+architecture: llama
+base_model_name: meta-llama/Llama-3.2-1B
+max_context_length: 100
+
+# LoRA configuration for parameter-efficient fine-tuning
+use_lora: true
+lora_config:
+  r: 16                    # LoRA rank (higher = more capacity, more params)
+  lora_alpha: 32          # Scaling factor (typically 2*r)
+  target_modules:
+    - q_proj              # Query projection
+    - v_proj              # Value projection
+    - k_proj              # Key projection
+    - o_proj              # Output projection
+  lora_dropout: 0.05
+
+# Training precision
+use_bf16: true
+use_fp16: false

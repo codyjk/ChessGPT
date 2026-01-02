@@ -1,0 +1,16 @@
+# ChessGPT 2026 - Root Configuration
+# This file composes all configuration components
+
+defaults:
+  - model: llama_1b
+  - training: phase1_general
+  - data: dataset
+  - logging: wandb
+  - _self_
+
+# Override settings
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: outputs/sweeps/${now:%Y-%m-%d}/${now:%H-%M-%S}

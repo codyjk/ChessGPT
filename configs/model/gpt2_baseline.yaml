@@ -1,0 +1,17 @@
+# GPT-2 baseline configuration (for comparison with old model)
+
+architecture: gpt2
+base_model_name: gpt2
+max_context_length: 50
+
+# GPT-2 specific params
+num_embeddings: 512
+num_layers: 4
+num_heads: 4
+
+# No LoRA for baseline GPT-2
+use_lora: false
+
+# Training precision
+use_bf16: true
+use_fp16: false

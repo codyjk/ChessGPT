@@ -1,0 +1,43 @@
+# Phase 2: Checkmate Specialization
+# Fine-tune on 70% checkmate games with higher weight
+
+phase: 2
+
+# Resume from Phase 1 best checkpoint
+resume_from: outputs/phase1/checkpoint-best
+
+# Training params (fewer epochs for fine-tuning)
+num_epochs: 4
+batch_size: 64
+gradient_accumulation_steps: 2
+
+# Learning rate (10x lower than Phase 1)
+learning_rate: 1e-5
+warmup_steps: 100
+lr_scheduler: constant_with_warmup
+
+# Regularization
+weight_decay: 0.01
+gradient_clip_norm: 1.0
+
+# Mixed precision
+mixed_precision: bf16
+gradient_checkpointing: true
+
+# Checkpointing
+save_steps: 0
+save_total_limit: 3
+load_best_model_at_end: true
+
+# Evaluation (focus on checkmate metrics)
+eval_steps: 0
+metric_for_best_model: checkmate_delivery_rate
+
+# Logging
+logging_steps: 10
+report_to:
+  - wandb
+
+# Data mixing (checkmate-heavy)
+checkmate_ratio: 0.70    # 70% checkmate examples
+checkmate_weight: 2.0    # 2x weight for checkmate samples

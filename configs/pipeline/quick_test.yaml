@@ -1,0 +1,49 @@
+# Quick test pipeline configuration
+# For rapid validation with small dataset (~30 minutes)
+# Uses 10K games from lichess_db_standard_rated_2016-04.pgn.zst
+
+name: chessgpt_quick_test
+output_dir: outputs/quick_test
+
+# Source data
+source_pgn: lichess_db_standard_rated_2016-04.pgn.zst
+max_games: 10000
+max_moves_per_game: 5
+min_elo: 1800
+
+# No auto-download for quick tests
+auto_download: false
+
+# Component configs
+model:
+  architecture: gpt2  # Faster for testing
+  base_model_name: gpt2
+  max_context_length: 50
+  num_embeddings: 128
+  num_layers: 2
+  num_heads: 2
+  use_lora: false
+
+data:
+  training_data_path: data/test/mini_training.csv  # 10K examples
+  checkmate_data_path: data/test/mini_checkmate.csv  # 1K examples
+  validation_data_path: data/test/mini_validation.csv  # 1K examples
+  tokenizer_path: data/test/mini_tokenizer.json
+  max_context_length: 50
+
+training_phase1:
+  phase: 1
+  num_epochs: 2
+  batch_size: 32
+  learning_rate: 3e-4
+  checkmate_ratio: 0.05
+
+training_phase2:
+  phase: 2
+  num_epochs: 1
+  batch_size: 32
+  learning_rate: 1e-5
+  checkmate_ratio: 0.70
+
+# Minimal evaluation
+run_full_eval: false
