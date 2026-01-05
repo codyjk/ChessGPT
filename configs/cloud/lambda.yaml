@@ -1,0 +1,53 @@
+# Lambda Labs Cloud Configuration
+
+provider: lambda
+api_base_url: https://cloud.lambdalabs.com/api/v1
+
+# Default region (will choose available region if not specified)
+default_region: us-west-1
+
+# SSH key name (must be uploaded to Lambda Labs first)
+# Upload with: lambda-cli ssh-keys add chessgpt-deploy ~/.ssh/chessgpt_deploy.pub
+ssh_key_name: chessgpt-deploy
+
+# GPU types and pricing (as of 2024)
+gpu_types:
+  A100:
+    instance_type: gpu_1x_a100
+    price_per_hour: 1.10
+    vram_gb: 40
+    description: "NVIDIA A100 40GB - Best for large models"
+
+  "A100-80GB":
+    instance_type: gpu_1x_a100_sxm4
+    price_per_hour: 1.50
+    vram_gb: 80
+    description: "NVIDIA A100 80GB - For very large models"
+
+  A10:
+    instance_type: gpu_1x_a10
+    price_per_hour: 0.60
+    vram_gb: 24
+    description: "NVIDIA A10 24GB - Budget-friendly option"
+
+  RTX6000:
+    instance_type: gpu_1x_rtx6000
+    price_per_hour: 0.50
+    vram_gb: 48
+    description: "NVIDIA RTX6000 Ada 48GB - Good value"
+
+# Setup commands (run during environment setup)
+setup_commands:
+  # System packages
+  - sudo apt-get update
+  - sudo apt-get install -y python3-pip git wget unzip zstd
+
+  # Poetry installation
+  - curl -sSL https://install.python-poetry.org | python3 -
+  - echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+
+# Training configuration
+training:
+  tmux_session_prefix: chessgpt
+  default_output_dir: models
+  wandb_mode: offline  # offline by default for cloud training
