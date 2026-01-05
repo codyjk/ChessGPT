@@ -66,6 +66,7 @@ models = "scripts.models:main"
 # Cloud deployment
 cloud-train = "scripts.cloud.deploy:main"
 cloud-instances = "scripts.cloud.instances:main"
+cloud-test = "scripts.cloud.test_local:main"
 
 # Legacy scripts (deprecated, will be removed)
 reduce-pgn = "scripts.reduce_pgn_to_moves:main"

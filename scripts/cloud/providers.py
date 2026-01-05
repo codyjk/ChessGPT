@@ -238,6 +238,11 @@ class LambdaProvider(CloudProvider):
 
 def get_provider(provider_name: str, **kwargs) -> CloudProvider:
     """Factory function to get provider instance."""
+    # Import here to avoid circular dependency
+    if provider_name.lower() == "local-test":
+        from .test_local import LocalTestProvider
+        return LocalTestProvider(**kwargs)
+
     providers = {
         "lambda": LambdaProvider,
         "ssh": SSHProvider,
@@ -245,6 +250,6 @@ def get_provider(provider_name: str, **kwargs) -> CloudProvider:
 
     provider_class = providers.get(provider_name.lower())
     if not provider_class:
-        raise ValueError(f"Unknown provider: {provider_name}. Choose from: {list(providers.keys())}")
+        raise ValueError(f"Unknown provider: {provider_name}. Choose from: {list(providers.keys()) + ['local-test']}")
 
     return provider_class(**kwargs)
