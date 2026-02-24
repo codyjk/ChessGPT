@@ -1,0 +1,24 @@
+# Medium config: ~50M params, hours per epoch
+# First "real" model — legal rate >95%, mate-in-1 >50%
+
+[model]
+d_model = 512
+n_layers = 12
+n_heads = 8
+max_context_length = 120
+dropout = 0.1
+
+[training]
+lr = 1e-4
+num_epochs = 10
+batch_size = 64
+grad_clip = 1.0
+alpha = 0.5
+beta = 0.5
+checkmate_weight = 5.0
+accumulation_steps = 2  # effective batch = 128
+
+[data]
+training_file = "data/train.csv"
+validation_file = "data/val.csv"
+tokenizer_file = "data/tokenizer.json"

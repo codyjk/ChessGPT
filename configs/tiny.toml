@@ -1,0 +1,23 @@
+# Tiny config: ~2M params, seconds per epoch
+# For rapid iteration and architectural experiments
+
+[model]
+d_model = 128
+n_layers = 4
+n_heads = 4
+max_context_length = 60
+
+[training]
+lr = 3e-4
+num_epochs = 10
+batch_size = 128
+grad_clip = 1.0
+alpha = 0.5          # value loss weight
+beta = 0.5           # checkmate loss weight
+checkmate_weight = 5.0  # policy loss multiplier for checkmate moves
+accumulation_steps = 1
+
+[data]
+training_file = "data/train.csv"
+validation_file = "data/val.csv"
+tokenizer_file = "data/tokenizer.json"

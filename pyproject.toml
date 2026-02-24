@@ -1,90 +1,43 @@
-[tool.poetry]
-name = "ChessGPT"
-version = "0.1.0"
-description = ""
-authors = ["Cody Joseph Krainock <me@codyjoseph.com>"]
-readme = "README.md"
-packages = [
-    {include = "chess_model", from = "src"},
-    {include = "pgn_utils", from = "src"}
+[project]
+name = "chessgpt"
+version = "2.0.0"
+description = "A custom chess transformer that learns to predict and play chess moves"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.4",
+    "python-chess>=1.999",
+    "tqdm>=4.66",
+    "numpy>=2.0",
+    "zstandard>=0.22",
 ]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-tqdm = "^4.66.5"
-boto3 = "^1.35.58"
-botocore = "^1.35.58"
-psutil = "^6.1.0"
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "pre-commit"]
 
-[tool.poetry.group.model]
-optional = true
-
-[tool.poetry.group.model.dependencies]
-transformers = "^4.44.0"
-numpy = "^2.0.1"
-python-chess = "^1.999"
-blessed = "^1.20.0"
-torch = "^2.4.0"
-
-[tool.poetry.group.dev.dependencies]
-flake8 = "^7.1.1"
-black = "^24.8.0"
-isort = "^5.13.2"
-mypy = "^1.11.1"
-jupyter = "^1.0.0"
-pytest = "^8.3.2"
-
-[tool.poetry.scripts]
-# S3 utilities
-s3-tree = "scripts.s3_utils:tree_command"
-s3-list-pgns = "scripts.s3_utils:list_pgns_command"
-s3-extract-games-from-pgns = "scripts.s3_utils:extract_games_command"
-s3-extract-checkmates-from-pgns = "scripts.s3_utils:extract_checkmates_command"
-
-# Model-related scripts (these require the model group to be installed)
-reduce-pgn = "scripts.reduce_pgn_to_moves:main"
-prepare-training-data = "scripts.prepare_training_data:main"
-fit-and-save-tokenizer = "scripts.fit_and_save_tokenizer:main"
-train-model = "scripts.train_model:main"
-test = "pytest:main"
-play = "scripts.play:main"
-explore = "scripts.explore:main"
+[project.scripts]
+chessgpt-download = "chessgpt.cli.download:main"
+chessgpt-prepare = "chessgpt.cli.prepare:main"
+chessgpt-train = "chessgpt.cli.train:main"
+chessgpt-play = "chessgpt.cli.play:main"
+chessgpt-eval = "chessgpt.cli.eval:main"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.black]
-line-length = 88
-target-version = ['py36', 'py37', 'py38', 'py39', 'py310']
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.eggs
-    | \.git
-    | \.hg
-    | \.mypy_cache
-    | \.tox
-    | \.venv
-    | _build
-    | buck-out
-    | build
-    | dist
-)/
-'''
+[tool.hatch.build.targets.wheel]
+packages = ["src/chessgpt"]
 
-[tool.isort]
-profile = "black"
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
 
-[tool.flake8]
-max-line-length = 88
-extend-ignore = ['E203', 'E501']
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
 
-[tool.mypy]
-python_version = 3.8
-warn_return_any = true
-warn_unused_configs = true
-warn_unused_ignores = true
-check_untyped_defs = true
-disallow_untyped_defs = true
-ignore_missing_imports = true
+[tool.ruff.lint.per-file-ignores]
+"src/chessgpt/evaluation/puzzles.py" = ["E501"]  # chess notation strings
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

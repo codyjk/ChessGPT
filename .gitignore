@@ -1,6 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+
+# Data (downloaded/processed — not tracked)
+data/*.pgn
+data/*.pgn.zst
+data/*.csv
+data/*.txt
 *.pgn
 *.pgn.zst
-*.txt
-*.ipynb_checkpoints/
-out/*
-__pycache__/
+
+# Training outputs
+out/
+experiments/*.jsonl
+
+# v1 artifacts (not part of v2)
+models/
+data/checkmate_tests/
+data/phase_splits/
+.ipynb_checkpoints/
+notebooks/**/.ipynb_checkpoints/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Misc
+*.log
+training_log.txt
+s3-tree.txt
+chessgpt_v2_deep_dive.md
