@@ -204,7 +204,7 @@ def run_cloud_train(
         )
         ssh.run_command(
             client,
-            "which tmux || apt-get install -y tmux",
+            "which tmux || (apt-get update -qq && apt-get install -y -qq tmux)",
             stream=False,
         )
 

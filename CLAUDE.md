@@ -7,10 +7,12 @@ ChessGPT v2 is a custom-built decoder-only transformer that learns chess from mo
 ## Quick Start
 
 ```bash
-uv sync --all-extras          # Install all dependencies
-uv run ruff check src/ tests/ # Lint
-uv run ruff format src/ tests/ # Format
-uv run pytest                 # Test
+make                          # Install all dependencies
+source .venv/bin/activate     # Put chessgpt-* commands on PATH
+make lint                     # Lint
+make format                   # Format
+make test                     # Test
+make check                    # Lint + format check + tests (CI-style)
 ```
 
 ## Training Pipeline
@@ -37,21 +39,35 @@ chessgpt-play --model out/experiment_v1/model.pt
 
 For medium/large models that exceed local GPU capacity. Requires `RUNPOD_API_KEY` or `VASTAI_API_KEY`.
 
-```bash
-uv sync --all-extras                    # includes cloud deps (paramiko, runpod)
+Training launches in a detached tmux session on the remote GPU so your local machine can disconnect (laptop sleep, network blip) without killing the run.
 
+```bash
 # List available GPUs and pricing
 chessgpt-cloud list-gpus --provider runpod
 
-# Train on a cloud GPU (provisions, syncs, trains, downloads, deprovisions)
+# Launch training (returns in ~5 min after provision + upload + install)
 chessgpt-cloud train --provider runpod --gpu A100 \
   --config configs/medium.toml --name medium_v1
 
-# Evaluate on a cloud GPU
+# Close laptop, go for a walk...
+
+# Check progress
+chessgpt-cloud status
+
+# Watch live tqdm output (Ctrl+B, D to detach)
+chessgpt-cloud attach
+
+# Download results
+chessgpt-cloud download
+
+# Tear down pod (auto-downloads first)
+chessgpt-cloud deprovision            # or --no-download to skip
+
+# Evaluate on a cloud GPU (still blocking -- eval is fast)
 chessgpt-cloud eval --provider runpod --gpu A100 --name medium_v1
 ```
 
-The cloud runner handles the full lifecycle automatically. On `Ctrl+C`, it attempts to download the current best checkpoint before deprovisioning.
+One active pod per project. State persists in `.cloud/pod.json`.
 
 ## Autonomous Iteration
 
@@ -106,7 +122,7 @@ src/chessgpt/
 ├── evaluation/     # Metrics + mate-in-1 puzzles
 ├── inference/      # Pure AI move selection
 ├── cli/            # CLI commands (download, prepare, train, eval, play, cloud)
-├── cloud/          # Cloud GPU training (provider ABC, SSH, runner, pricing)
+├── cloud/          # Cloud GPU training (provider ABC, SSH, runner, state, pricing)
 │   └── providers/  # Concrete backends (runpod, vastai)
 └── pgn/            # PGN parsing utilities
 ```
