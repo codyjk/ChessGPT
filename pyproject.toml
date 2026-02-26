@@ -13,6 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "pre-commit"]
+cloud = ["paramiko>=3.0", "runpod>=1.7"]
 
 [project.scripts]
 chessgpt-download = "chessgpt.cli.download:main"
@@ -20,6 +21,7 @@ chessgpt-prepare = "chessgpt.cli.prepare:main"
 chessgpt-train = "chessgpt.cli.train:main"
 chessgpt-play = "chessgpt.cli.play:main"
 chessgpt-eval = "chessgpt.cli.eval:main"
+chessgpt-cloud = "chessgpt.cli.cloud:main"
 
 [build-system]
 requires = ["hatchling"]
