@@ -343,14 +343,18 @@ def cloud_attach(
         "-p",
         str(pod.port),
         f"{pod.username}@{pod.host}",
-        f"tmux attach-session -t {pod.tmux_session}",
+        f"TERM=xterm-256color tmux attach-session -t {pod.tmux_session}",
     ]
 
     print(f"Attaching to tmux session '{pod.tmux_session}' on {pod.instance_id}...")
     print("  (Ctrl+B, D to detach)\n")
 
+    # Set TERM locally too in case ssh propagates it
+    env = os.environ.copy()
+    env["TERM"] = "xterm-256color"
+
     # Replace this process with ssh
-    os.execvp("ssh", ssh_args)
+    os.execve("/usr/bin/ssh", ssh_args, env)
 
 
 def cloud_download(
