@@ -1,0 +1,24 @@
+# Small config: ~15M params, minutes per epoch
+# Validates that improvements from tiny transfer
+
+[model]
+d_model = 256
+n_layers = 8
+n_heads = 8
+max_context_length = 80
+dropout = 0.1
+
+[training]
+lr = 3e-4
+num_epochs = 15
+batch_size = 64
+grad_clip = 1.0
+alpha = 0.5
+beta = 0.5
+checkmate_weight = 5.0
+accumulation_steps = 1
+
+[data]
+training_file = "data/train.csv"
+validation_file = "data/val.csv"
+tokenizer_file = "data/tokenizer.json"

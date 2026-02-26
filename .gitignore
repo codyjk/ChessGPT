@@ -1,48 +1,48 @@
-# Large data files
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+
+# Data (downloaded/processed — not tracked)
+data/*.pgn
+data/*.pgn.zst
+data/*.csv
+data/*.txt
 *.pgn
 *.pgn.zst
-*.txt
-*.csv
 
-# Output directories
-out/*
-data/phase_splits/
-outputs/
+# Training outputs
+out/
+experiments/*.jsonl
+
+# v1 artifacts (not part of v2)
 models/
-trained_models/*
-
-# Keep directory structure but ignore contents
-!trained_models/.gitkeep
-!models/.gitkeep
-!data/.gitkeep
-
-# Python
-*.ipynb_checkpoints/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-
-# Model files
-*.pth
-*.pt
-*.bin
-*.safetensors
-
-# Logs
-*.log
-wandb/
-
-# Cloud deployment state
-.cloudgpt/
+data/checkmate_tests/
+data/phase_splits/
+.ipynb_checkpoints/
+notebooks/**/.ipynb_checkpoints/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
 
+# Secrets
+.env
+
 # OS
 .DS_Store
-Thumbs.db
+
+# Misc
+*.log
+training_log.txt
+s3-tree.txt
+chessgpt_v2_deep_dive.md

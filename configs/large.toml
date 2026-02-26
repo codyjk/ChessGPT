@@ -1,0 +1,23 @@
+# Large config: ~300M params, cloud GPU only
+# Only after medium proves the approach
+
+[model]
+d_model = 1024
+n_layers = 24
+n_heads = 16
+max_context_length = 200
+
+[training]
+lr = 3e-5
+num_epochs = 30
+batch_size = 16
+grad_clip = 1.0
+alpha = 0.5
+beta = 0.5
+checkmate_weight = 5.0
+accumulation_steps = 4  # effective batch = 64
+
+[data]
+training_file = "data/train.csv"
+validation_file = "data/val.csv"
+tokenizer_file = "data/tokenizer.json"

@@ -1,154 +1,112 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-ChessGPT is a custom-trained GPT-2 transformer model that learns to predict and play chess moves. The model has no prior knowledge of chess rules—it learns entirely from sequences of grandmaster-level games in algebraic notation. The architecture is based on GPT-2 and trains on move sequences like `d4 e6 Nf3 g6 Bg5 Bg7 Bxd8 1-0`.
+ChessGPT v2 is a custom-built decoder-only transformer that learns chess from move sequences. It has three output heads (policy, value, checkmate) to develop checkmate-seeking behavior. The model plays without python-chess at inference — legal move rate is a first-class metric.
 
-## Development Commands
-
-### Installation
-
-Two installation modes depending on use case:
-```bash
-# For model training/playing (requires GPU)
-poetry install --with model
-
-# For S3 data processing only (e.g., on EC2)
-poetry install --without model
-```
-
-### Testing
+## Quick Start
 
 ```bash
-# Run all tests
-poetry run pytest
-
-# Run specific test file
-poetry run pytest tests/test_chess_dataset.py
-
-# Run with verbose output
-poetry run pytest -v
+uv sync --all-extras          # Install all dependencies
+uv run ruff check src/ tests/ # Lint
+uv run ruff format src/ tests/ # Format
+uv run pytest                 # Test
 ```
 
-### Code Quality
+## Training Pipeline
 
 ```bash
-# Format code
-poetry run black .
+# 1. Download Lichess PGN
+chessgpt-download --year 2013 --month 1 --output-dir data/
 
-# Sort imports
-poetry run isort .
+# 2. Process PGN → enriched CSV + fit tokenizer
+chessgpt-prepare --input-pgn data/lichess_db_standard_rated_2013-01.pgn \
+  --output-csv data/train.csv --fit-tokenizer data/tokenizer.json
 
-# Lint code
-poetry run flake8
+# 3. Train (always start with tiny config)
+chessgpt-train --config configs/tiny.toml --name experiment_v1
 
-# Type checking
-poetry run mypy src/
+# 4. Evaluate
+chessgpt-eval --model out/experiment_v1/model.pt
+
+# 5. Play
+chessgpt-play --model out/experiment_v1/model.pt
 ```
 
-### Interactive CLI
+## Cloud Training
+
+For medium/large models that exceed local GPU capacity. Requires `RUNPOD_API_KEY` or `VASTAI_API_KEY`.
 
 ```bash
-# Launch interactive exploration CLI (play against pre-trained models)
-poetry run explore
+uv sync --all-extras                    # includes cloud deps (paramiko, runpod)
+
+# List available GPUs and pricing
+chessgpt-cloud list-gpus --provider runpod
+
+# Train on a cloud GPU (provisions, syncs, trains, downloads, deprovisions)
+chessgpt-cloud train --provider runpod --gpu A100 \
+  --config configs/medium.toml --name medium_v1
+
+# Evaluate on a cloud GPU
+chessgpt-cloud eval --provider runpod --gpu A100 --name medium_v1
 ```
 
-### Training Pipeline (Full Workflow)
+The cloud runner handles the full lifecycle automatically. On `Ctrl+C`, it attempts to download the current best checkpoint before deprovisioning.
 
-```bash
-# 1. Reduce PGN database to move sequences (segmented by ELO rating)
-poetry run reduce-pgn --input-pgn-file data/lichess.pgn --output-dir out
+## Autonomous Iteration
 
-# 2. Prepare training and validation datasets
-poetry run prepare-training-data \
-  --input-reduced-pgn-file out/master.txt \
-  --output-training-data-file out/training-data.csv \
-  --output-validation-data-file out/validation-data.csv \
-  --max-context-length 10 \
-  --validation-split 0.1
+1. Always start with `configs/tiny.toml` (seconds per run)
+2. Train: `uv run chessgpt-train --config configs/tiny.toml --name <name>`
+3. Eval: `uv run chessgpt-eval --model out/<name>/model.pt`
+4. Compare: read `experiments/log.jsonl`
+5. Only scale to `small.toml` after tiny shows improvement
 
-# 3. Fit and save tokenizer
-poetry run fit-and-save-tokenizer \
-  --input-training-data-file out/training-data.csv \
-  --output-tokenizer-file out/chess_tokenizer.json
-
-# 4. Train the model
-poetry run train-model \
-  --input-training-data-file out/training-data.csv \
-  --input-validation-data-file out/validation-data.csv \
-  --input-tokenizer-file out/chess_tokenizer.json \
-  --max-context-length 10 \
-  --num-embeddings 256 \
-  --num-layers 4 \
-  --num-heads 4 \
-  --num-epochs 10 \
-  --batch-size 128
-
-# 5. Play against the trained model
-poetry run play \
-  --input-model-file out/chess_transformer_model.pth \
-  --input-tokenizer-file out/chess_tokenizer.json \
-  --max-context-length 10 \
-  --num-embeddings 256 \
-  --num-layers 4 \
-  --num-heads 4 \
-  --color white
-```
-
-### S3 Utilities (for AWS data processing)
-
-```bash
-poetry run s3-tree
-poetry run s3-list-pgns
-poetry run s3-extract-games-from-pgns
-poetry run s3-extract-checkmates-from-pgns
-```
+**Primary metric**: `mate_in_1_top1` (higher is better)
+**Gate metric**: `legal_move_rate` (must be >80%)
 
 ## Architecture
 
-### Core Modules
+Custom decoder-only transformer with modern internals:
+- **attention.py** — Multi-head causal self-attention with RoPE
+- **layers.py** — TransformerBlock with RMSNorm + SwiGLU FFN
+- **heads.py** — Policy (next move), Value (game outcome), Checkmate (detection)
+- **transformer.py** — Full model assembly
 
-**`src/chess_model/model/`**
-- `transformer.py`: `ChessTransformer` wraps HuggingFace GPT2Model with a linear head for next-move prediction
-- `tokenizer.py`: `ChessTokenizer` maps chess moves to token IDs. Uses custom vocabulary fitted from training data (not BPE). Includes `[PAD]` and `[UNK]` special tokens.
+Three output heads:
+- **Policy**: `[batch, seq, vocab]` — next move prediction at every position
+- **Value**: `[batch, 3]` — game outcome (white/draw/black)
+- **Checkmate**: `[batch, 1]` — checkmate availability (training signal only)
 
-**`src/chess_model/data/`**
-- `dataset.py`: `ChessDataset` reads CSV files with format `context,is_checkmate,outcome`. Uses memory-mapped file access with cached line offsets for efficient random access without loading entire dataset into memory. Implements outcome-based masking (trains on winning player's moves for decisive games, all moves for draws).
+## Model Configs
 
-**`src/chess_model/training/`**
-- `training.py`: Contains `train_model()` function with AdamW optimizer, ReduceLROnPlateau scheduler, gradient clipping, and masked loss calculation that respects outcome-based move masking.
+| Config | d_model | layers | heads | ~params | Use case |
+|--------|---------|--------|-------|---------|----------|
+| tiny   | 128     | 4      | 4     | 2M      | Rapid iteration (seconds) |
+| small  | 256     | 8      | 8     | 15M     | Validation (minutes) |
+| medium | 512     | 12     | 8     | 50M     | Real training (hours) |
+| large  | 1024    | 24     | 16    | 300M    | Cloud GPU only |
 
-**`src/pgn_utils/`**
-- `pgn_utils.py`: PGN parsing utilities with regex patterns for metadata, moves, and outcomes. Key function: `process_raw_games_from_file()` yields `RawGame` named tuples.
-- `count_lines.py`: Fast line counting for progress bars during large file processing.
+## Key Design Decisions
 
-### Data Flow
+- **No python-chess at inference** — model plays on its own
+- **Outcome-based masking** — train on winner's moves only for decisive games
+- **Checkmate weighting** — 5x loss weight for checkmate-delivering moves
+- **RoPE** — no learned position embeddings, generalizes to longer sequences
+- **Pre-norm** — RMSNorm before each sublayer (more stable than GPT-2's post-norm)
+- **mmap dataset** — memory-efficient random access for large CSV files
+- **num_workers=0** — macOS MPS multiprocessing is buggy
 
-1. **PGN → Reduced Moves**: Raw PGN games are parsed and reduced to space-separated move sequences with outcomes (`d4 e6 Nf3 1-0`)
-2. **Moves → Training Data**: Move sequences become CSV rows with context windows (previous moves) and labels (next move)
-3. **Tokenization**: ChessTokenizer maps each unique move string to an integer ID
-4. **Dataset Loading**: ChessDataset provides PyTorch-compatible batches with padding, masking, and outcome labels
-5. **Training**: ChessTransformer learns to predict next moves via cross-entropy loss with outcome-based masking
-6. **Inference**: Trained model predicts legal moves given game context; CLI handles move validation via python-chess
+## Project Structure
 
-### Key Design Patterns
-
-- **Memory-efficient data loading**: ChessDataset uses mmap with line offset indexing to handle multi-GB CSV files without loading into RAM
-- **Outcome-based training**: Loss function masks out moves from losing players, so model learns winning patterns
-- **Left-padding**: Context sequences are left-padded with `[PAD]` tokens to handle variable-length game contexts
-- **Hyperparameter matching**: Training and inference scripts must use identical hyperparameters (max_context_length, num_embeddings, num_layers, num_heads)
-
-### Important Constraints
-
-- **Hyperparameter consistency**: The model architecture is frozen at training time. To use a trained model for inference (play/explore), you must pass the exact same hyperparameters used during training.
-- **Tokenizer dependency**: The tokenizer vocabulary is fitted from training data. You cannot use a model with a different tokenizer than the one used during training.
-- **Max context length**: Truncates games longer than max_context_length by keeping only the most recent moves.
-
-## Common Pitfalls
-
-- **Mismatched hyperparameters**: If playing with a trained model, ensure all architecture params (n_positions, n_embd, n_layer, n_head) match training config
-- **Missing tokenizer**: Always generate and save tokenizer before training; load same tokenizer file during inference
-- **Large file handling**: Use `shuf -n N` to create smaller subsets for quick testing rather than processing full Lichess databases
-- **Device compatibility**: Code automatically detects CUDA, MPS, or CPU. On M1/M2 Macs, PyTorch will use MPS backend.
+```
+src/chessgpt/
+├── model/          # Transformer architecture (attention, layers, heads, tokenizer)
+├── data/           # Dataset, download, data preparation
+├── training/       # Training loop + multi-task loss
+├── evaluation/     # Metrics + mate-in-1 puzzles
+├── inference/      # Pure AI move selection
+├── cli/            # CLI commands (download, prepare, train, eval, play, cloud)
+├── cloud/          # Cloud GPU training (provider ABC, SSH, runner, pricing)
+│   └── providers/  # Concrete backends (runpod, vastai)
+└── pgn/            # PGN parsing utilities
+```
