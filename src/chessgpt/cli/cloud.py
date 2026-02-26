@@ -134,7 +134,18 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _load_dotenv() -> None:
+    """Load .env file from the project root if it exists."""
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except ImportError:
+        pass
+
+
 def main() -> None:
+    _load_dotenv()
     parser = _build_parser()
     args = parser.parse_args()
 

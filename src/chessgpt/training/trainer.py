@@ -7,7 +7,7 @@ No HuggingFace Trainer — just explicit forward/backward/step with:
 - Gradient clipping
 - Checkpoint saving per epoch
 - Multi-task loss (policy + value + checkmate)
-- Mixed precision (autocast) for CUDA and MPS
+- Mixed precision (autocast) for CUDA
 - Gradient accumulation for larger effective batch sizes
 - Optional torch.compile on CUDA
 - tqdm progress bars for real-time monitoring
@@ -41,14 +41,11 @@ def _get_autocast_context(device: torch.device):
     """Return an autocast context manager appropriate for the device.
 
     CUDA: float16 autocast (works with GradScaler).
-    MPS: float16 autocast (no GradScaler — MPS doesn't support it).
-    CPU: no-op context manager (autocast adds overhead with no benefit).
+    MPS/CPU: no-op (MPS float16 autocast adds overhead that outweighs
+    compute savings for models under ~100M params).
     """
     if device.type == "cuda":
         return torch.autocast("cuda", dtype=torch.float16)
-    elif device.type == "mps":
-        return torch.autocast("mps", dtype=torch.float16)
-    # CPU: return a no-op context manager
     return torch.autocast("cpu", enabled=False)
 
 

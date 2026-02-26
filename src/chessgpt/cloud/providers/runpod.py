@@ -28,6 +28,9 @@ _GPU_TYPE_MAP: dict[str, str] = {
     "RTX_4090": "NVIDIA GeForce RTX 4090",
     "RTX_3090": "NVIDIA GeForce RTX 3090",
     "A6000": "NVIDIA RTX A6000",
+    "A40": "NVIDIA A40",
+    "L4": "NVIDIA L4",
+    "L40": "NVIDIA L40",
     "L40S": "NVIDIA L40S",
 }
 
@@ -101,7 +104,8 @@ class RunPodProvider(CloudProvider):
             image_name=spec.image,
             gpu_type_id=runpod_gpu_id,
             gpu_count=spec.gpu_count,
-            volume_in_gb=spec.disk_gb,
+            volume_in_gb=0,
+            container_disk_in_gb=spec.disk_gb,
             ports="22/tcp",
             docker_args="",
         )

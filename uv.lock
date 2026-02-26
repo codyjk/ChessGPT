@@ -643,6 +643,7 @@ dependencies = [
 [package.optional-dependencies]
 cloud = [
     { name = "paramiko" },
+    { name = "python-dotenv" },
     { name = "runpod" },
 ]
 dev = [
@@ -658,6 +659,7 @@ requires-dist = [
     { name = "pre-commit", marker = "extra == 'dev'" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "python-chess", specifier = ">=1.999" },
+    { name = "python-dotenv", marker = "extra == 'cloud'", specifier = ">=1.0" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "runpod", marker = "extra == 'cloud'", specifier = ">=1.7" },
     { name = "torch", specifier = ">=2.4" },

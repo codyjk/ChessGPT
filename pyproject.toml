@@ -13,7 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "pre-commit"]
-cloud = ["paramiko>=3.0", "runpod>=1.7"]
+cloud = ["paramiko>=3.0", "runpod>=1.7", "python-dotenv>=1.0"]
 
 [project.scripts]
 chessgpt-download = "chessgpt.cli.download:main"

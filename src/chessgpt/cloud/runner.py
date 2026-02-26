@@ -176,10 +176,7 @@ def run_cloud_train(
         print("\n[4/7] Installing dependencies...")
         ssh.run_command(
             client,
-            f"cd {REMOTE_PROJECT_DIR} && "
-            "curl -LsSf https://astral.sh/uv/install.sh | sh && "
-            "export PATH=$HOME/.local/bin:$PATH && "
-            "uv sync --all-extras",
+            f"cd {REMOTE_PROJECT_DIR} && pip install -e . 2>&1",
         )
 
         # Step 5: Train
@@ -188,8 +185,7 @@ def run_cloud_train(
         ssh.run_command(
             client,
             f"cd {REMOTE_PROJECT_DIR} && "
-            f"export PATH=$HOME/.local/bin:$PATH && "
-            f"uv run chessgpt-train --config {shlex.quote(config_path)} "
+            f"chessgpt-train --config {shlex.quote(config_path)} "
             f"--name {shlex.quote(experiment_name)} "
             f"--output-dir {shlex.quote(remote_output)}",
         )
@@ -286,16 +282,12 @@ def run_cloud_eval(
         print("\n[4/5] Installing dependencies and running eval...")
         ssh.run_command(
             client,
-            f"cd {REMOTE_PROJECT_DIR} && "
-            "curl -LsSf https://astral.sh/uv/install.sh | sh && "
-            "export PATH=$HOME/.local/bin:$PATH && "
-            "uv sync --all-extras",
+            f"cd {REMOTE_PROJECT_DIR} && pip install -e . 2>&1",
         )
         ssh.run_command(
             client,
             f"cd {REMOTE_PROJECT_DIR} && "
-            f"export PATH=$HOME/.local/bin:$PATH && "
-            f"uv run chessgpt-eval --model {remote_model_dir}/model.pt "
+            f"chessgpt-eval --model {remote_model_dir}/model.pt "
             f"--log-file {REMOTE_PROJECT_DIR}/experiments/log.jsonl",
         )
 
