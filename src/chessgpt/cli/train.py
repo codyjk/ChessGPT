@@ -18,6 +18,13 @@ def main():
     parser.add_argument("--config", type=str, required=True, help="Path to TOML config file")
     parser.add_argument("--name", type=str, required=True, help="Experiment name")
     parser.add_argument("--output-dir", type=str, default="out", help="Base output directory")
+    parser.add_argument(
+        "--log-style",
+        type=str,
+        choices=["tqdm", "line"],
+        default="tqdm",
+        help="Logging style: tqdm (progress bars) or line (newline-based, better for tmux/logs)",
+    )
     args = parser.parse_args()
 
     # Load config
@@ -94,6 +101,14 @@ def main():
         "accumulation_steps": config["training"].get("accumulation_steps", 1),
     }
 
-    train(model, train_loader, val_loader, training_config, device, str(output_dir))
+    train(
+        model,
+        train_loader,
+        val_loader,
+        training_config,
+        device,
+        str(output_dir),
+        log_style=args.log_style,
+    )
 
     print(f"\nExperiment saved to: {output_dir}")

@@ -216,6 +216,7 @@ def run_cloud_train(
             f"chessgpt-train --config {shlex.quote(config_path)} "
             f"--name {shlex.quote(experiment_name)} "
             f"--output-dir {shlex.quote(remote_output)} "
+            f"--log-style line "
             f"2>&1 | tee {REMOTE_LOG_FILE}; "
             f"echo ${{PIPESTATUS[0]}} > {REMOTE_EXIT_CODE_FILE}"
         )

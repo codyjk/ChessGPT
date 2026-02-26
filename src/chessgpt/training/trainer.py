@@ -56,12 +56,19 @@ def train(
     config: dict,
     device: torch.device,
     output_dir: str,
+    *,
+    log_style: str = "tqdm",
 ) -> dict:
     """
     Train the model and save checkpoints.
 
     config keys: lr, num_epochs, grad_clip, alpha, beta, warmup_steps,
                  accumulation_steps
+
+    Args:
+        log_style: "tqdm" for interactive progress bars (default),
+                   "line" for newline-based batch logging (better for tmux/logs).
+
     Returns: final metrics dict.
     """
     output_path = Path(output_dir)
@@ -104,6 +111,8 @@ def train(
     scaler = torch.amp.GradScaler("cuda") if use_scaler else None
     autocast_ctx = _get_autocast_context(device)
 
+    use_tqdm = log_style == "tqdm"
+
     best_val_loss = float("inf")
     training_log = []
     start_time = time.time()
@@ -120,13 +129,22 @@ def train(
         num_batches = 0
 
         optimizer.zero_grad()
-        pbar = tqdm(
-            train_loader,
-            desc=f"Epoch {epoch + 1}/{config['num_epochs']}",
-            leave=True,
-        )
+        total_batches = len(train_loader)
+        # Log every ~10% of batches (at least every 50, at most every 500)
+        line_log_interval = max(50, min(500, total_batches // 10))
 
-        for batch_idx, batch in enumerate(pbar):
+        if use_tqdm:
+            pbar = tqdm(
+                train_loader,
+                desc=f"Epoch {epoch + 1}/{config['num_epochs']}",
+                leave=True,
+            )
+            batch_iter = enumerate(pbar)
+        else:
+            print(f"Epoch {epoch + 1}/{config['num_epochs']} ({total_batches} batches)")
+            batch_iter = enumerate(train_loader)
+
+        for batch_idx, batch in batch_iter:
             input_ids = batch["input_ids"].to(device)
             labels = batch["labels"].to(device)
             outcome = batch["outcome"].to(device)
@@ -172,11 +190,18 @@ def train(
                 epoch_losses[k] += v
             num_batches += 1
 
-            # Update tqdm postfix every batch
-            pbar.set_postfix(
-                loss=f"{details['total_loss']:.4f}",
-                lr=f"{optimizer.param_groups[0]['lr']:.2e}",
-            )
+            if use_tqdm:
+                pbar.set_postfix(
+                    loss=f"{details['total_loss']:.4f}",
+                    lr=f"{optimizer.param_groups[0]['lr']:.2e}",
+                )
+            elif (batch_idx + 1) % line_log_interval == 0 or (batch_idx + 1) == total_batches:
+                pct = 100 * (batch_idx + 1) / total_batches
+                lr = optimizer.param_groups[0]["lr"]
+                print(
+                    f"  batch {batch_idx + 1}/{total_batches} ({pct:.0f}%)"
+                    f"  loss={details['total_loss']:.4f}  lr={lr:.2e}"
+                )
 
         # Average epoch losses
         for k in epoch_losses:
@@ -185,7 +210,9 @@ def train(
         # --- Validate ---
         val_losses = None
         if val_loader is not None:
-            val_losses = evaluate_loss(model, val_loader, loss_fn, device, autocast_ctx)
+            val_losses = evaluate_loss(
+                model, val_loader, loss_fn, device, autocast_ctx, use_tqdm=use_tqdm
+            )
 
         # --- Log ---
         entry = {
@@ -232,6 +259,8 @@ def evaluate_loss(
     loss_fn: MultiTaskLoss,
     device: torch.device,
     autocast_ctx=None,
+    *,
+    use_tqdm: bool = True,
 ) -> dict[str, float]:
     model.eval()
     totals = {
@@ -246,7 +275,8 @@ def evaluate_loss(
         autocast_ctx = torch.autocast("cpu", enabled=False)
 
     with torch.no_grad():
-        for batch in tqdm(data_loader, desc="Validating", leave=False):
+        val_iter = tqdm(data_loader, desc="Validating", leave=False) if use_tqdm else data_loader
+        for batch in val_iter:
             input_ids = batch["input_ids"].to(device)
             labels = batch["labels"].to(device)
             outcome = batch["outcome"].to(device)
