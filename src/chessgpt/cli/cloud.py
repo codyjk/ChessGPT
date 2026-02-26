@@ -1,11 +1,15 @@
 """CLI: Run training and evaluation on cloud GPUs.
 
 Wraps the existing chessgpt-train and chessgpt-eval commands, running them
-on a remote GPU instance via SSH. The training code stays untouched — this
-module only handles provisioning, file sync, and remote execution.
+on a remote GPU instance via SSH. Training launches in a detached tmux session
+so the local machine can disconnect without killing the run.
 
 Usage:
     chessgpt-cloud train --provider runpod --gpu A100 --config configs/large.toml --name large_v1
+    chessgpt-cloud status
+    chessgpt-cloud attach
+    chessgpt-cloud download
+    chessgpt-cloud deprovision [--no-download]
     chessgpt-cloud eval  --provider runpod --gpu A100 --name large_v1
     chessgpt-cloud list-gpus --provider runpod [--gpu A100]
 """
@@ -17,7 +21,15 @@ import sys
 
 from chessgpt.cloud.pricing import estimate_cost, format_cost_estimate
 from chessgpt.cloud.providers import get_provider, list_providers
-from chessgpt.cloud.runner import _detect_config_size, run_cloud_eval, run_cloud_train
+from chessgpt.cloud.runner import (
+    _detect_config_size,
+    cloud_attach,
+    cloud_deprovision,
+    cloud_download,
+    cloud_status,
+    run_cloud_eval,
+    run_cloud_train,
+)
 
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
@@ -63,7 +75,6 @@ def _cmd_train(args: argparse.Namespace) -> None:
         gpu_type=args.gpu,
         gpu_count=args.gpu_count,
         disk_gb=args.disk_gb,
-        output_dir=args.output_dir,
     )
 
 
@@ -79,6 +90,26 @@ def _cmd_eval(args: argparse.Namespace) -> None:
         disk_gb=args.disk_gb,
         output_dir=args.output_dir,
     )
+
+
+def _cmd_status(args: argparse.Namespace) -> None:
+    """Handle the 'status' subcommand."""
+    cloud_status()
+
+
+def _cmd_attach(args: argparse.Namespace) -> None:
+    """Handle the 'attach' subcommand."""
+    cloud_attach()
+
+
+def _cmd_download(args: argparse.Namespace) -> None:
+    """Handle the 'download' subcommand."""
+    cloud_download(output_dir=args.output_dir)
+
+
+def _cmd_deprovision(args: argparse.Namespace) -> None:
+    """Handle the 'deprovision' subcommand."""
+    cloud_deprovision(download=not args.no_download, output_dir=args.output_dir)
 
 
 def _cmd_list_gpus(args: argparse.Namespace) -> None:
@@ -120,6 +151,36 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_common_args(eval_parser)
     eval_parser.add_argument("--name", type=str, required=True, help="Experiment name to evaluate")
 
+    # status
+    subparsers.add_parser("status", help="Check training progress on the active pod")
+
+    # attach
+    subparsers.add_parser("attach", help="Attach to live training output (tmux)")
+
+    # download
+    download_parser = subparsers.add_parser("download", help="Download results from the active pod")
+    download_parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="out",
+        help="Local base output directory (default: out)",
+    )
+
+    # deprovision
+    deprovision_parser = subparsers.add_parser("deprovision", help="Tear down the active pod")
+    deprovision_parser.add_argument(
+        "--no-download",
+        action="store_true",
+        default=False,
+        help="Skip downloading results before terminating",
+    )
+    deprovision_parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="out",
+        help="Local base output directory (default: out)",
+    )
+
     # list-gpus
     list_parser = subparsers.add_parser("list-gpus", help="List available GPUs from a provider")
     available = ", ".join(list_providers())
@@ -154,6 +215,14 @@ def main() -> None:
             _cmd_train(args)
         elif args.command == "eval":
             _cmd_eval(args)
+        elif args.command == "status":
+            _cmd_status(args)
+        elif args.command == "attach":
+            _cmd_attach(args)
+        elif args.command == "download":
+            _cmd_download(args)
+        elif args.command == "deprovision":
+            _cmd_deprovision(args)
         elif args.command == "list-gpus":
             _cmd_list_gpus(args)
     except KeyboardInterrupt:

@@ -35,6 +35,9 @@ notebooks/**/.ipynb_checkpoints/
 *.swp
 *.swo
 
+# Cloud pod state
+.cloud/
+
 # Secrets
 .env
 

@@ -7,10 +7,11 @@ Tests are split into categories:
 - Provider registry (lazy imports, error handling)
 - CLI argument parsing
 - SSH helpers (exclusion patterns, mkdir -p)
-- Orchestration integration (mock provider + mock SSH)
-- Interrupt handling (KeyboardInterrupt during training)
+- Pod state persistence (save/load/clear, InstanceInfo conversion)
+- Orchestration integration (mock provider + mock SSH, tmux-based training)
+- Cloud lifecycle commands (status, deprovision)
 
-No live provider tests — those cost money and require API keys.
+No live provider tests -- those cost money and require API keys.
 """
 
 from __future__ import annotations
@@ -608,47 +609,214 @@ class TestCliParsing:
         with pytest.raises(SystemExit):
             self._parse(["train", "--gpu", "A100"])
 
+    def test_status_subcommand(self) -> None:
+        args = self._parse(["status"])
+        assert args.command == "status"
+
+    def test_attach_subcommand(self) -> None:
+        args = self._parse(["attach"])
+        assert args.command == "attach"
+
+    def test_download_subcommand(self) -> None:
+        args = self._parse(["download"])
+        assert args.command == "download"
+        assert args.output_dir == "out"
+
+    def test_download_custom_output_dir(self) -> None:
+        args = self._parse(["download", "--output-dir", "results"])
+        assert args.output_dir == "results"
+
+    def test_deprovision_subcommand(self) -> None:
+        args = self._parse(["deprovision"])
+        assert args.command == "deprovision"
+        assert args.no_download is False
+
+    def test_deprovision_no_download(self) -> None:
+        args = self._parse(["deprovision", "--no-download"])
+        assert args.no_download is True
+
+    def test_deprovision_custom_output_dir(self) -> None:
+        args = self._parse(["deprovision", "--output-dir", "results"])
+        assert args.output_dir == "results"
+
+
+# ---------------------------------------------------------------------------
+# Pod state persistence tests
+# ---------------------------------------------------------------------------
+
+
+class TestPodState:
+    def test_save_load_roundtrip(self, tmp_path: Path) -> None:
+        """Saving and loading should produce identical PodState."""
+        from chessgpt.cloud.state import PodState, load_state, save_state
+
+        pod = PodState(
+            instance_id="pod-123",
+            host="10.0.0.1",
+            port=22222,
+            username="root",
+            ssh_key_path="~/.ssh/id_ed25519",
+            gpu_type="A100",
+            cost_per_hour=1.60,
+            experiment_name="medium_v1",
+            config_path="configs/medium.toml",
+            provider_name="runpod",
+            started_at="2026-01-15T10:00:00+00:00",
+        )
+
+        save_state(pod, tmp_path)
+        loaded = load_state(tmp_path)
+
+        assert loaded is not None
+        assert loaded.instance_id == pod.instance_id
+        assert loaded.host == pod.host
+        assert loaded.port == pod.port
+        assert loaded.experiment_name == pod.experiment_name
+        assert loaded.config_path == pod.config_path
+        assert loaded.provider_name == pod.provider_name
+        assert loaded.started_at == pod.started_at
+        assert loaded.tmux_session == "chessgpt-train"
+        assert loaded.cost_per_hour == 1.60
+
+    def test_load_nonexistent_returns_none(self, tmp_path: Path) -> None:
+        from chessgpt.cloud.state import load_state
+
+        assert load_state(tmp_path) is None
+
+    def test_clear_removes_file(self, tmp_path: Path) -> None:
+        from chessgpt.cloud.state import PodState, clear_state, load_state, save_state
+
+        pod = PodState(
+            instance_id="pod-x",
+            host="h",
+            port=22,
+            username="root",
+            ssh_key_path="/k",
+            gpu_type="A100",
+            cost_per_hour=1.0,
+            experiment_name="exp",
+            config_path="configs/tiny.toml",
+            provider_name="runpod",
+            started_at="2026-01-01T00:00:00+00:00",
+        )
+        save_state(pod, tmp_path)
+        assert load_state(tmp_path) is not None
+
+        clear_state(tmp_path)
+        assert load_state(tmp_path) is None
+
+    def test_clear_nonexistent_is_safe(self, tmp_path: Path) -> None:
+        """Clearing when no state exists should not raise."""
+        from chessgpt.cloud.state import clear_state
+
+        clear_state(tmp_path)  # no error
+
+    def test_from_instance_info(self, sample_info: InstanceInfo) -> None:
+        from chessgpt.cloud.state import PodState
+
+        pod = PodState.from_instance_info(
+            sample_info,
+            experiment_name="exp1",
+            config_path="configs/large.toml",
+            provider_name="runpod",
+            started_at="2026-02-01T12:00:00+00:00",
+        )
+
+        assert pod.instance_id == sample_info.instance_id
+        assert pod.host == sample_info.host
+        assert pod.port == sample_info.port
+        assert pod.gpu_type == sample_info.gpu_type
+        assert pod.cost_per_hour == sample_info.cost_per_hour
+        assert pod.experiment_name == "exp1"
+        assert pod.provider_name == "runpod"
+
+    def test_to_instance_info(self) -> None:
+        from chessgpt.cloud.state import PodState
+
+        pod = PodState(
+            instance_id="pod-abc",
+            host="1.2.3.4",
+            port=22,
+            username="root",
+            ssh_key_path="/key",
+            gpu_type="H100",
+            cost_per_hour=2.50,
+            experiment_name="test",
+            config_path="configs/tiny.toml",
+            provider_name="vastai",
+            started_at="2026-01-01T00:00:00+00:00",
+        )
+
+        info = pod.to_instance_info()
+        assert isinstance(info, InstanceInfo)
+        assert info.instance_id == "pod-abc"
+        assert info.host == "1.2.3.4"
+        assert info.gpu_type == "H100"
+        assert info.cost_per_hour == 2.50
+
+    def test_save_creates_cloud_dir(self, tmp_path: Path) -> None:
+        """save_state should create .cloud/ if it doesn't exist."""
+        from chessgpt.cloud.state import PodState, save_state
+
+        pod = PodState(
+            instance_id="p",
+            host="h",
+            port=22,
+            username="root",
+            ssh_key_path="/k",
+            gpu_type="A100",
+            cost_per_hour=1.0,
+            experiment_name="e",
+            config_path="c",
+            provider_name="runpod",
+            started_at="t",
+        )
+
+        path = save_state(pod, tmp_path)
+        assert path.exists()
+        assert (tmp_path / ".cloud").is_dir()
+
 
 # ---------------------------------------------------------------------------
 # Orchestration integration tests (mocked SSH + provider)
 # ---------------------------------------------------------------------------
 
 
-class TestRunCloudTrain:
-    """Integration tests for the run_cloud_train orchestrator using mocks.
+class TestRunCloudTrainTmux:
+    """Integration tests for the tmux-based run_cloud_train orchestrator.
 
-    These verify the orchestration sequence without any real network calls:
-    provision → connect → upload → install → train → download → deprovision.
+    Verifies: provision → connect → upload → install → tmux launch → state saved.
+    Pod is NOT deprovisioned on success (stays running for attach/status/download).
     """
 
+    @patch("chessgpt.cloud.runner.save_state")
+    @patch("chessgpt.cloud.runner.load_state", return_value=None)
     @patch("chessgpt.cloud.runner.ssh")
     @patch("chessgpt.cloud.runner._resolve_data_files")
-    def test_full_lifecycle_sequence(
-        self, mock_resolve: MagicMock, mock_ssh: MagicMock, tmp_path: Path
+    def test_tmux_launch_and_state_saved(
+        self,
+        mock_resolve: MagicMock,
+        mock_ssh: MagicMock,
+        mock_load: MagicMock,
+        mock_save: MagicMock,
+        tmp_path: Path,
     ) -> None:
-        """Verify the complete train lifecycle calls happen in order."""
+        """Verify tmux command is sent and state is saved."""
         from chessgpt.cloud.runner import run_cloud_train
 
         provider = FakeProvider()
         mock_resolve.return_value = []
-
-        # Mock SSH: connect returns a client, commands succeed
         mock_client = MagicMock()
         mock_ssh.connect.return_value = mock_client
         mock_ssh.upload_directory.return_value = 10
         mock_ssh.run_command.return_value = (0, "", "")
-        mock_ssh.download_directory.return_value = 5
 
-        # Create minimal project structure
-        src_dir = tmp_path / "src"
-        src_dir.mkdir()
-        (src_dir / "dummy.py").write_text("# test")
-        configs_dir = tmp_path / "configs"
-        configs_dir.mkdir()
-        (configs_dir / "tiny.toml").write_text("[model]\n")
-        (tmp_path / "pyproject.toml").write_text("[project]\n")
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "d.py").write_text("")
+        (tmp_path / "configs").mkdir()
+        (tmp_path / "pyproject.toml").write_text("")
 
-        result = run_cloud_train(
+        run_cloud_train(
             config_path="configs/tiny.toml",
             experiment_name="test_run",
             provider=provider,
@@ -656,48 +824,49 @@ class TestRunCloudTrain:
             project_root=tmp_path,
         )
 
-        # Verify provision was called
+        # Provision was called
         assert len(provider.provisioned) == 1
-        assert provider.provisioned[0].gpu_type == "A100"
 
-        # Verify SSH connect was called with correct info
-        mock_ssh.connect.assert_called_once()
+        # SSH commands: install deps, install tmux, launch tmux
+        assert mock_ssh.run_command.call_count == 3
 
-        # Verify deprovision was called
-        assert "fake-001" in provider.deprovisioned
+        # tmux command should be the third call
+        tmux_call = mock_ssh.run_command.call_args_list[2]
+        tmux_cmd_arg = tmux_call[0][1]  # positional arg: command string
+        assert "tmux new-session -d -s chessgpt-train" in tmux_cmd_arg
 
-        # Result should be a Path
-        assert isinstance(result, Path)
+        # State was saved
+        mock_save.assert_called_once()
 
+        # Pod was NOT deprovisioned (stays running)
+        assert len(provider.deprovisioned) == 0
+
+    @patch("chessgpt.cloud.runner.load_state", return_value=None)
     @patch("chessgpt.cloud.runner.ssh")
     @patch("chessgpt.cloud.runner._resolve_data_files")
-    def test_deprovision_called_on_training_failure(
-        self, mock_resolve: MagicMock, mock_ssh: MagicMock, tmp_path: Path
+    def test_deprovision_on_setup_failure(
+        self,
+        mock_resolve: MagicMock,
+        mock_ssh: MagicMock,
+        mock_load: MagicMock,
+        tmp_path: Path,
     ) -> None:
-        """If training fails, the instance must still be deprovisioned."""
+        """If setup fails (e.g. install), the pod must be deprovisioned."""
         from chessgpt.cloud.runner import run_cloud_train
 
         provider = FakeProvider()
         mock_resolve.return_value = []
-
         mock_client = MagicMock()
         mock_ssh.connect.return_value = mock_client
         mock_ssh.upload_directory.return_value = 5
+        mock_ssh.run_command.side_effect = RuntimeError("Install failed")
 
-        # First run_command (install) succeeds, second (train) fails
-        mock_ssh.run_command.side_effect = [
-            (0, "", ""),  # install deps
-            RuntimeError("Training crashed"),  # train
-        ]
-
-        # Create minimal structure
-        src_dir = tmp_path / "src"
-        src_dir.mkdir()
-        (src_dir / "dummy.py").write_text("")
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "d.py").write_text("")
         (tmp_path / "configs").mkdir()
         (tmp_path / "pyproject.toml").write_text("")
 
-        with pytest.raises(RuntimeError, match="Training crashed"):
+        with pytest.raises(RuntimeError, match="Install failed"):
             run_cloud_train(
                 config_path="configs/tiny.toml",
                 experiment_name="fail_run",
@@ -706,56 +875,56 @@ class TestRunCloudTrain:
                 project_root=tmp_path,
             )
 
-        # Deprovision must be called even after failure
+        # Pod must be deprovisioned on failure
         assert "fake-001" in provider.deprovisioned
 
-    @patch("chessgpt.cloud.runner.ssh")
-    @patch("chessgpt.cloud.runner._resolve_data_files")
-    def test_keyboard_interrupt_attempts_download(
-        self, mock_resolve: MagicMock, mock_ssh: MagicMock, tmp_path: Path
+    @patch("chessgpt.cloud.runner.load_state")
+    def test_blocks_when_pod_already_active(
+        self,
+        mock_load: MagicMock,
+        tmp_path: Path,
     ) -> None:
-        """On KeyboardInterrupt, try to download checkpoint before deprovisioning."""
+        """Should raise if a pod is already active."""
         from chessgpt.cloud.runner import run_cloud_train
+        from chessgpt.cloud.state import PodState
+
+        mock_load.return_value = PodState(
+            instance_id="existing-pod",
+            host="h",
+            port=22,
+            username="root",
+            ssh_key_path="/k",
+            gpu_type="A100",
+            cost_per_hour=1.0,
+            experiment_name="old_exp",
+            config_path="configs/tiny.toml",
+            provider_name="runpod",
+            started_at="2026-01-01T00:00:00+00:00",
+        )
 
         provider = FakeProvider()
-        mock_resolve.return_value = []
 
-        mock_client = MagicMock()
-        mock_ssh.connect.return_value = mock_client
-        mock_ssh.upload_directory.return_value = 5
-        mock_ssh.download_directory.return_value = 3
-
-        # Install succeeds, train raises KeyboardInterrupt
-        mock_ssh.run_command.side_effect = [
-            (0, "", ""),  # install
-            KeyboardInterrupt(),  # train interrupted
-            (0, "", ""),  # cat log.jsonl in _download_results
-        ]
-
-        (tmp_path / "src").mkdir()
-        (tmp_path / "src" / "dummy.py").write_text("")
-        (tmp_path / "configs").mkdir()
-        (tmp_path / "pyproject.toml").write_text("")
-
-        with pytest.raises(KeyboardInterrupt):
+        with pytest.raises(RuntimeError, match="already active"):
             run_cloud_train(
                 config_path="configs/tiny.toml",
-                experiment_name="int_run",
+                experiment_name="new_exp",
                 provider=provider,
                 gpu_type="A100",
                 project_root=tmp_path,
             )
 
-        # Should have attempted download (download_directory called)
-        assert mock_ssh.download_directory.called
+        # Nothing should have been provisioned
+        assert len(provider.provisioned) == 0
 
-        # Must still deprovision
-        assert "fake-001" in provider.deprovisioned
-
+    @patch("chessgpt.cloud.runner.load_state", return_value=None)
     @patch("chessgpt.cloud.runner.ssh")
     @patch("chessgpt.cloud.runner._resolve_data_files")
-    def test_deprovision_called_on_connect_failure(
-        self, mock_resolve: MagicMock, mock_ssh: MagicMock, tmp_path: Path
+    def test_deprovision_on_connect_failure(
+        self,
+        mock_resolve: MagicMock,
+        mock_ssh: MagicMock,
+        mock_load: MagicMock,
+        tmp_path: Path,
     ) -> None:
         """If SSH connect fails, deprovision should still be called."""
         from chessgpt.cloud.runner import run_cloud_train
@@ -778,6 +947,184 @@ class TestRunCloudTrain:
             )
 
         assert "fake-001" in provider.deprovisioned
+
+
+# ---------------------------------------------------------------------------
+# Cloud status tests
+# ---------------------------------------------------------------------------
+
+
+class TestCloudStatus:
+    @patch("chessgpt.cloud.runner.ssh")
+    @patch("chessgpt.cloud.runner.load_state")
+    def test_running_status(self, mock_load: MagicMock, mock_ssh: MagicMock) -> None:
+        """Status should detect training is running when no sentinel exists."""
+        from chessgpt.cloud.runner import cloud_status
+        from chessgpt.cloud.state import PodState
+
+        mock_load.return_value = PodState(
+            instance_id="pod-1",
+            host="h",
+            port=22,
+            username="root",
+            ssh_key_path="/k",
+            gpu_type="A100",
+            cost_per_hour=1.0,
+            experiment_name="exp",
+            config_path="configs/tiny.toml",
+            provider_name="runpod",
+            started_at="2026-01-15T10:00:00+00:00",
+        )
+
+        mock_client = MagicMock()
+        mock_ssh.connect.return_value = mock_client
+
+        # cat exit_code fails (no sentinel) = still running
+        # tail log succeeds
+        mock_ssh.run_command.side_effect = [
+            RuntimeError("No such file"),  # cat .train_exit_code
+            (0, "Epoch 3/10 loss=0.5\n", ""),  # tail log
+        ]
+
+        cloud_status()  # should not raise
+
+        # SSH was connected and closed
+        mock_ssh.connect.assert_called_once()
+        mock_client.close.assert_called_once()
+
+    @patch("chessgpt.cloud.runner.ssh")
+    @patch("chessgpt.cloud.runner.load_state")
+    def test_completed_status(self, mock_load: MagicMock, mock_ssh: MagicMock) -> None:
+        """Status should detect training completed via sentinel file."""
+        from chessgpt.cloud.runner import cloud_status
+        from chessgpt.cloud.state import PodState
+
+        mock_load.return_value = PodState(
+            instance_id="pod-1",
+            host="h",
+            port=22,
+            username="root",
+            ssh_key_path="/k",
+            gpu_type="A100",
+            cost_per_hour=1.0,
+            experiment_name="exp",
+            config_path="configs/tiny.toml",
+            provider_name="runpod",
+            started_at="2026-01-15T10:00:00+00:00",
+        )
+
+        mock_client = MagicMock()
+        mock_ssh.connect.return_value = mock_client
+
+        # cat exit_code returns "0" = done
+        # tail log succeeds
+        mock_ssh.run_command.side_effect = [
+            (0, "0\n", ""),  # cat .train_exit_code
+            (0, "Training complete\n", ""),  # tail log
+        ]
+
+        cloud_status()  # should not raise
+
+    @patch("chessgpt.cloud.runner.load_state", return_value=None)
+    def test_no_active_pod(self, mock_load: MagicMock) -> None:
+        """Status with no active pod should print message, not raise."""
+        from chessgpt.cloud.runner import cloud_status
+
+        cloud_status()  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# Cloud deprovision tests
+# ---------------------------------------------------------------------------
+
+
+class TestCloudDeprovision:
+    @patch("chessgpt.cloud.runner.clear_state")
+    @patch("chessgpt.cloud.runner.ssh")
+    @patch("chessgpt.cloud.runner.load_state")
+    def test_downloads_terminates_clears(
+        self, mock_load: MagicMock, mock_ssh: MagicMock, mock_clear: MagicMock
+    ) -> None:
+        """Deprovision should download, terminate, and clear state."""
+        from chessgpt.cloud.runner import cloud_deprovision
+        from chessgpt.cloud.state import PodState
+
+        mock_load.return_value = PodState(
+            instance_id="pod-1",
+            host="h",
+            port=22,
+            username="root",
+            ssh_key_path="/k",
+            gpu_type="A100",
+            cost_per_hour=1.0,
+            experiment_name="exp",
+            config_path="configs/tiny.toml",
+            provider_name="runpod",
+            started_at="2026-01-15T10:00:00+00:00",
+        )
+
+        mock_client = MagicMock()
+        mock_ssh.connect.return_value = mock_client
+        mock_ssh.download_directory.return_value = 3
+        mock_ssh.run_command.return_value = (0, "", "")
+
+        provider = FakeProvider()
+        cloud_deprovision(provider=provider)
+
+        # Download attempted
+        mock_ssh.download_directory.assert_called_once()
+
+        # Pod terminated
+        assert "pod-1" in provider.deprovisioned
+
+        # State cleared
+        mock_clear.assert_called_once()
+
+    @patch("chessgpt.cloud.runner.clear_state")
+    @patch("chessgpt.cloud.runner.ssh")
+    @patch("chessgpt.cloud.runner.load_state")
+    def test_no_download_flag(
+        self, mock_load: MagicMock, mock_ssh: MagicMock, mock_clear: MagicMock
+    ) -> None:
+        """With download=False, should skip download step."""
+        from chessgpt.cloud.runner import cloud_deprovision
+        from chessgpt.cloud.state import PodState
+
+        mock_load.return_value = PodState(
+            instance_id="pod-1",
+            host="h",
+            port=22,
+            username="root",
+            ssh_key_path="/k",
+            gpu_type="A100",
+            cost_per_hour=1.0,
+            experiment_name="exp",
+            config_path="configs/tiny.toml",
+            provider_name="runpod",
+            started_at="2026-01-15T10:00:00+00:00",
+        )
+
+        provider = FakeProvider()
+        cloud_deprovision(download=False, provider=provider)
+
+        # No SSH connection for download
+        mock_ssh.connect.assert_not_called()
+
+        # Still deprovisioned
+        assert "pod-1" in provider.deprovisioned
+        mock_clear.assert_called_once()
+
+    @patch("chessgpt.cloud.runner.load_state", return_value=None)
+    def test_no_active_pod(self, mock_load: MagicMock) -> None:
+        """Deprovision with no active pod should print message, not raise."""
+        from chessgpt.cloud.runner import cloud_deprovision
+
+        cloud_deprovision()  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# Cloud eval tests (unchanged behavior)
+# ---------------------------------------------------------------------------
 
 
 class TestRunCloudEval:
