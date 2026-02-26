@@ -33,6 +33,26 @@ chessgpt-eval --model out/experiment_v1/model.pt
 chessgpt-play --model out/experiment_v1/model.pt
 ```
 
+## Cloud Training
+
+For medium/large models that exceed local GPU capacity. Requires `RUNPOD_API_KEY` or `VASTAI_API_KEY`.
+
+```bash
+uv sync --all-extras                    # includes cloud deps (paramiko, runpod)
+
+# List available GPUs and pricing
+chessgpt-cloud list-gpus --provider runpod
+
+# Train on a cloud GPU (provisions, syncs, trains, downloads, deprovisions)
+chessgpt-cloud train --provider runpod --gpu A100 \
+  --config configs/medium.toml --name medium_v1
+
+# Evaluate on a cloud GPU
+chessgpt-cloud eval --provider runpod --gpu A100 --name medium_v1
+```
+
+The cloud runner handles the full lifecycle automatically. On `Ctrl+C`, it attempts to download the current best checkpoint before deprovisioning.
+
 ## Autonomous Iteration
 
 1. Always start with `configs/tiny.toml` (seconds per run)
@@ -85,6 +105,8 @@ src/chessgpt/
 ├── training/       # Training loop + multi-task loss
 ├── evaluation/     # Metrics + mate-in-1 puzzles
 ├── inference/      # Pure AI move selection
-├── cli/            # CLI commands (download, prepare, train, eval, play)
+├── cli/            # CLI commands (download, prepare, train, eval, play, cloud)
+├── cloud/          # Cloud GPU training (provider ABC, SSH, runner, pricing)
+│   └── providers/  # Concrete backends (runpod, vastai)
 └── pgn/            # PGN parsing utilities
 ```

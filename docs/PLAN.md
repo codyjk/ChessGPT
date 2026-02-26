@@ -46,10 +46,12 @@ src/chessgpt/
   training/       # Training loop + multi-task loss
   evaluation/     # Metrics + mate-in-1 puzzles
   inference/      # Pure AI move selection
-  cli/            # CLI commands (download, prepare, train, eval, play)
+  cli/            # CLI commands (download, prepare, train, eval, play, cloud)
+  cloud/          # Cloud GPU training (provider ABC, SSH, runner, pricing)
+    providers/    # Concrete backends (runpod, vastai)
   pgn/            # PGN parsing utilities
 configs/          # tiny.toml, small.toml, medium.toml, large.toml
-tests/            # 5 test files covering all modules
+tests/            # 6 test files covering all modules
 experiments/      # Structured experiment logs (JSONL)
 ```
 
@@ -218,3 +220,83 @@ Each step is a gate. Don't scale without evidence that things are working.
 - Always use dropout (0.1 minimum) -- prevents severe overfitting
 - lr=3e-4 works better than 1e-4 for these model sizes
 - Expanded puzzle set from 2 to 12 effective tests
+
+---
+
+## Phase 7: Cloud Training
+
+Medium model takes ~15 hours on local MPS; large is impractical locally. Cloud GPUs (A100, H100) make both viable at $1-10 per run. The cloud module wraps the existing `chessgpt-train`/`chessgpt-eval` commands — training code stays untouched.
+
+### Architecture
+
+```mermaid
+flowchart TD
+    CLI["cli/cloud.py<br/>(argparse: train | eval | list-gpus)"]
+    RUNNER["runner.py<br/>(orchestrate lifecycle)"]
+    PRICING["pricing.py<br/>(cost estimates)"]
+    ABC["provider.py<br/>(CloudProvider ABC)"]
+    SSH["ssh.py<br/>(paramiko SFTP/exec)"]
+    RP["providers/runpod.py"]
+    VA["providers/vastai.py"]
+
+    CLI --> RUNNER
+    CLI --> PRICING
+    RUNNER --> ABC
+    RUNNER --> SSH
+    ABC --> RP
+    ABC --> VA
+```
+
+### Orchestration Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Runner
+    participant Provider
+    participant SSH
+    participant Remote as Remote GPU
+
+    User->>Runner: chessgpt-cloud train
+    Runner->>Provider: provision(spec)
+    Provider-->>Runner: InstanceInfo (host, port, key)
+
+    Runner->>SSH: connect(host, port)
+    SSH-->>Runner: SSHClient
+
+    Runner->>SSH: upload_directory(src/, configs/, data/)
+    SSH->>Remote: SFTP put
+
+    Runner->>SSH: run_command("uv sync")
+    SSH->>Remote: install deps
+
+    Runner->>SSH: run_command("chessgpt-train ...")
+    SSH->>Remote: train (streamed stdout)
+    Remote-->>SSH: training output
+    SSH-->>Runner: streaming display
+
+    Runner->>SSH: download_directory(out/)
+    SSH->>Remote: SFTP get
+    Remote-->>SSH: model + logs
+
+    Runner->>Provider: deprovision(instance_id)
+    Runner-->>User: model at out/{name}/
+```
+
+### Provider Abstraction
+
+Each backend implements four methods: `list_gpu_offers`, `provision`, `status`, `deprovision`. Everything else goes through the shared SSH/SFTP layer.
+
+| Provider | SDK | Auth | Notes |
+|----------|-----|------|-------|
+| RunPod | `runpod` Python package | `RUNPOD_API_KEY` | Non-standard SSH ports via TCP proxy |
+| Vast.ai | `vastai` CLI (subprocess) | `VASTAI_API_KEY` | Marketplace model, filters reliability >0.95 |
+
+### Key Design Decisions
+
+- **Provision blocks until SSH-ready**: each provider polls its API internally
+- **Deprovision is idempotent**: safe in `finally` blocks (always runs)
+- **KeyboardInterrupt handling**: downloads current best checkpoint before teardown
+- **SFTP over rsync**: guaranteed available on every provider
+- **Lazy provider imports**: avoids requiring all provider SDKs at import time
+- **Shell injection prevention**: all user-supplied values wrapped in `shlex.quote()`
