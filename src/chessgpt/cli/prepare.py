@@ -10,11 +10,13 @@ from chessgpt.data.prepare import prepare_training_data, print_stats
 from chessgpt.model.tokenizer import ChessTokenizer
 
 
-def _invoke_lambda(year: int, month: int, bucket: str, min_elo: int, function_name: str) -> None:
+def _invoke_lambda(
+    year: int, month: int, bucket: str, min_elo: int, function_name: str, region: str | None
+) -> None:
     """Invoke the prepare Lambda function asynchronously."""
     import boto3
 
-    client = boto3.client("lambda")
+    client = boto3.client("lambda", **({"region_name": region} if region else {}))
     payload = {"year": year, "month": month, "bucket": bucket, "min_elo": min_elo}
     response = client.invoke(
         FunctionName=function_name,
@@ -146,6 +148,9 @@ def main():
     parser.add_argument(
         "--val-split", type=float, default=0.05, help="Validation split ratio (default: 0.05)"
     )
+    parser.add_argument(
+        "--region", type=str, default=None, help="AWS region (default: from AWS config)"
+    )
     args = parser.parse_args()
 
     if args.cloud:
@@ -153,7 +158,9 @@ def main():
             parser.error("--cloud requires --bucket")
         if not args.year or not args.month:
             parser.error("--cloud requires --year and --month")
-        _invoke_lambda(args.year, args.month, args.bucket, args.min_elo, args.function_name)
+        _invoke_lambda(
+            args.year, args.month, args.bucket, args.min_elo, args.function_name, args.region
+        )
         return
 
     if args.merge_from_s3:

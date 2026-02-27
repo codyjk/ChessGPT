@@ -6,11 +6,13 @@ import json
 from chessgpt.data.download import download_pgn, download_zst
 
 
-def _invoke_lambda(year: int, month: int, bucket: str, function_name: str) -> None:
+def _invoke_lambda(
+    year: int, month: int, bucket: str, function_name: str, region: str | None
+) -> None:
     """Invoke the download Lambda function asynchronously."""
     import boto3
 
-    client = boto3.client("lambda")
+    client = boto3.client("lambda", **({"region_name": region} if region else {}))
     payload = {"year": year, "month": month, "bucket": bucket}
     response = client.invoke(
         FunctionName=function_name,
@@ -42,12 +44,15 @@ def main():
         default="chessgpt-download",
         help="Lambda function name (default: chessgpt-download)",
     )
+    parser.add_argument(
+        "--region", type=str, default=None, help="AWS region (default: from AWS config)"
+    )
     args = parser.parse_args()
 
     if args.cloud:
         if not args.bucket:
             parser.error("--cloud requires --bucket")
-        _invoke_lambda(args.year, args.month, args.bucket, args.function_name)
+        _invoke_lambda(args.year, args.month, args.bucket, args.function_name, args.region)
         return
 
     if args.zst_only:

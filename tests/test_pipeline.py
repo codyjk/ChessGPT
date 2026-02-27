@@ -254,7 +254,7 @@ class TestCLICloudFlags:
         with patch.object(sys, "argv", argv):
             main()
 
-        mock_invoke.assert_called_once_with(2013, 1, "my-bucket", "chessgpt-download")
+        mock_invoke.assert_called_once_with(2013, 1, "my-bucket", "chessgpt-download", None)
 
     def test_prepare_cloud_requires_bucket(self) -> None:
         """--cloud without --bucket should fail."""
