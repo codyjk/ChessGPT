@@ -69,6 +69,26 @@ chessgpt-cloud eval --provider runpod --gpu A100 --name medium_v1
 
 One active pod per project. State persists in `.cloud/pod.json`.
 
+## Data Pipeline (AWS Lambda)
+
+For processing large Lichess datasets that exceed local disk. Two Lambda functions (download + prepare) share one Docker image. Infra is in `infra/` (Terraform).
+
+```bash
+# Process a single month via Lambda
+chessgpt-download --year 2017 --month 1 --cloud --bucket <bucket>
+chessgpt-prepare --year 2017 --month 1 --cloud --bucket <bucket>
+
+# After all months complete, merge locally
+chessgpt-prepare --merge-from-s3 --year 2017 --bucket <bucket> \
+  --output-csv data/train_large.csv --fit-tokenizer data/tokenizer_large.json
+
+# Deploy infra
+make deploy          # docker build + push + terraform apply
+make logs            # tail both Lambda log groups
+```
+
+**Lambda limits**: 15-minute timeout, 10GB `/tmp`. Months up to ~4GB compressed (.zst) work reliably -- this covers 2013-2017. Months from 2020+ (5-20GB compressed) will exceed `/tmp` or timeout. For those, use a GPU pod via `chessgpt-cloud` instead.
+
 ## Autonomous Iteration
 
 1. Always start with `configs/tiny.toml` (seconds per run)
@@ -124,5 +144,6 @@ src/chessgpt/
 ├── cli/            # CLI commands (download, prepare, train, eval, play, cloud)
 ├── cloud/          # Cloud GPU training (provider ABC, SSH, runner, state, pricing)
 │   └── providers/  # Concrete backends (runpod, vastai)
+├── lambdas/        # AWS Lambda handlers for data pipeline
 └── pgn/            # PGN parsing utilities
 ```

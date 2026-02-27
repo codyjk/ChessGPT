@@ -4,11 +4,15 @@ PGN parsing utilities for processing Lichess game databases.
 Handles the core text parsing of PGN files: extracting metadata lines (e.g. [WhiteElo "1800"]),
 parsing algebraic move notation (e.g. "1. d4 e6 2. Nf3 b6"), and detecting game outcomes.
 Works line-by-line to support streaming through multi-GB PGN files.
+
+Supports both plain .pgn and compressed .pgn.zst files via zstandard streaming decompression.
 """
 
+import io
 import re
 import subprocess
-from typing import Iterator, NamedTuple
+import sys
+from typing import Iterable, Iterator, NamedTuple
 
 
 class RawGame(NamedTuple):
@@ -68,23 +72,51 @@ def raw_game_has_moves(raw_game: RawGame, min_moves: int = 2) -> bool:
     return len(moves) >= min_moves and bool(OUTCOME_PATTERN.search(outcome))
 
 
+def _parse_pgn_lines(lines: Iterable[str]) -> Iterator[RawGame]:
+    """Parse PGN lines into RawGame objects. Works with any iterable of strings."""
+    current_metadata: list[str] = []
+    for line in lines:
+        if line == "":
+            continue
+        if is_metadata_line(line):
+            current_metadata.append(line)
+            continue
+        if is_moves_line(line):
+            yield RawGame(current_metadata, line)
+            current_metadata = []
+            continue
+
+
+def _open_zst_lines(filename: str) -> Iterator[str]:
+    """Stream lines from a .pgn.zst file without decompressing to disk."""
+    import zstandard
+
+    dctx = zstandard.ZstdDecompressor()
+    with open(filename, "rb") as fh:
+        reader = dctx.stream_reader(fh)
+        text_stream = io.TextIOWrapper(reader, encoding="utf-8")
+        yield from text_stream
+
+
 def process_raw_games_from_file(filename: str) -> Iterator[RawGame]:
-    """Stream RawGame objects from a PGN file, yielding one per game."""
+    """Stream RawGame objects from a PGN or .pgn.zst file, yielding one per game."""
     from tqdm import tqdm
 
-    total_lines = count_lines_fast(filename)
-    current_metadata: list[str] = []
-    with open(filename) as file:
-        for line in tqdm(file, total=total_lines, desc="Processing PGN"):
-            if line == "":
-                continue
-            if is_metadata_line(line):
-                current_metadata.append(line)
-                continue
-            if is_moves_line(line):
-                yield RawGame(current_metadata, line)
-                current_metadata = []
-                continue
+    # Disable tqdm progress bars when not on a TTY (e.g. Lambda, pipes)
+    show_progress = sys.stderr.isatty()
+
+    if filename.endswith(".zst"):
+        # Streaming decompression -- no line count available, use unknown total
+        lines = _open_zst_lines(filename)
+        yield from _parse_pgn_lines(
+            tqdm(lines, desc="Processing PGN (zst stream)", disable=not show_progress)
+        )
+    else:
+        total_lines = count_lines_fast(filename)
+        with open(filename) as file:
+            yield from _parse_pgn_lines(
+                tqdm(file, total=total_lines, desc="Processing PGN", disable=not show_progress)
+            )
 
 
 def get_elo(raw_game: RawGame) -> tuple[int | None, int | None]:

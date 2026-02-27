@@ -38,6 +38,12 @@ notebooks/**/.ipynb_checkpoints/
 # Cloud pod state
 .cloud/
 
+# Terraform
+infra/.terraform/
+infra/*.tfstate*
+infra/.terraform.lock.hcl
+terraform.tfvars
+
 # Secrets
 .env
 

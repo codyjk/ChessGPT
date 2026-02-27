@@ -1,0 +1,3 @@
+aws_region    = "us-east-1"
+project_name  = "chessgpt"
+bucket_suffix = "your-unique-suffix"

@@ -641,6 +641,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+aws = [
+    { name = "boto3" },
+]
 cloud = [
     { name = "paramiko" },
     { name = "python-dotenv" },
@@ -654,6 +657,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.34" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "paramiko", marker = "extra == 'cloud'", specifier = ">=3.0" },
     { name = "pre-commit", marker = "extra == 'dev'" },
@@ -666,7 +670,7 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.66" },
     { name = "zstandard", specifier = ">=0.22" },
 ]
-provides-extras = ["dev", "cloud"]
+provides-extras = ["dev", "cloud", "aws"]
 
 [[package]]
 name = "click"
