@@ -99,6 +99,7 @@ def main():
         "alpha": config["training"].get("alpha", 0.5),
         "beta": config["training"].get("beta", 0.5),
         "accumulation_steps": config["training"].get("accumulation_steps", 1),
+        "patience": config["training"].get("patience", 0),
     }
 
     train(

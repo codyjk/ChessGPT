@@ -23,6 +23,7 @@ chessgpt-play = "chessgpt.cli.play:main"
 chessgpt-eval = "chessgpt.cli.eval:main"
 chessgpt-cloud = "chessgpt.cli.cloud:main"
 chessgpt-analyze = "chessgpt.cli.analyze:main"
+chessgpt-match = "chessgpt.cli.match:main"
 
 [build-system]
 requires = ["hatchling"]

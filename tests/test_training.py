@@ -1,9 +1,11 @@
 """Tests for the training loop and multi-task loss."""
 
 import torch
+from torch.utils.data import DataLoader
 
 from chessgpt.model.transformer import ChessTransformer, TransformerConfig
 from chessgpt.training.loss import MultiTaskLoss
+from chessgpt.training.trainer import train
 
 
 def make_tiny_model(vocab_size: int = 50) -> ChessTransformer:
@@ -359,3 +361,139 @@ def test_model_training_step_loss_decreases():
         optimizer.step()
 
     assert loss.item() < loss_initial.item(), "Loss should decrease after training"
+
+
+def _make_loader(vocab_size: int = 50, n_samples: int = 8, seq_len: int = 10):
+    """Create a minimal DataLoader with the fields train() expects."""
+    input_ids = torch.randint(1, vocab_size, (n_samples, seq_len))
+    labels = torch.randint(1, vocab_size, (n_samples, seq_len))
+    outcome = torch.zeros(n_samples, 3)
+    outcome[:, 0] = 1.0
+    checkmate_available = torch.zeros(n_samples)
+    move_mask = torch.ones(n_samples, seq_len)
+    checkmate_weight = torch.ones(n_samples, seq_len)
+
+    class DictDataset(torch.utils.data.Dataset):
+        def __init__(self, *tensors, keys):
+            self.tensors = tensors
+            self.keys = keys
+
+        def __len__(self):
+            return self.tensors[0].shape[0]
+
+        def __getitem__(self, idx):
+            return {k: t[idx] for k, t in zip(self.keys, self.tensors)}
+
+    ds = DictDataset(
+        input_ids,
+        labels,
+        outcome,
+        checkmate_available,
+        move_mask,
+        checkmate_weight,
+        keys=[
+            "input_ids",
+            "labels",
+            "outcome",
+            "checkmate_available",
+            "move_mask",
+            "checkmate_weight",
+        ],
+    )
+    return DataLoader(ds, batch_size=4, shuffle=False)
+
+
+def test_early_stopping_triggers(tmp_path):
+    """Training stops early when val loss doesn't improve for `patience` epochs."""
+    torch.manual_seed(42)
+    model = make_tiny_model()
+
+    # Train on one distribution, validate on a completely different one.
+    # The model overfits to training data, and val loss diverges.
+    train_loader = _make_loader(n_samples=8)
+    torch.manual_seed(99)  # Different seed -> different random labels
+    val_loader = _make_loader(n_samples=8)
+
+    config = {
+        "lr": 1e-2,  # High LR to overfit quickly
+        "num_epochs": 50,
+        "grad_clip": 1.0,
+        "alpha": 0.0,
+        "beta": 0.0,
+        "patience": 3,
+    }
+
+    result = train(
+        model,
+        train_loader,
+        val_loader,
+        config,
+        torch.device("cpu"),
+        str(tmp_path),
+        log_style="line",
+    )
+    log = result["training_log"]
+
+    # With patience=3, training should stop well before epoch 50
+    assert len(log) < 50, f"Expected early stop before epoch 50, ran {len(log)} epochs"
+    # Must have run at least 4 epochs (1 best + 3 patience)
+    assert len(log) >= 4
+
+
+def test_early_stopping_disabled_with_patience_zero(tmp_path):
+    """patience=0 disables early stopping -- all epochs run."""
+    torch.manual_seed(42)
+    model = make_tiny_model()
+    loader = _make_loader()
+    config = {
+        "lr": 1e-3,
+        "num_epochs": 5,
+        "grad_clip": 1.0,
+        "alpha": 0.0,
+        "beta": 0.0,
+        "patience": 0,
+    }
+
+    result = train(
+        model, loader, loader, config, torch.device("cpu"), str(tmp_path), log_style="line"
+    )
+    assert len(result["training_log"]) == 5
+
+
+def test_early_stopping_saves_best_checkpoint(tmp_path):
+    """The saved checkpoint should be from the best epoch, not the last."""
+    torch.manual_seed(42)
+    model = make_tiny_model()
+
+    train_loader = _make_loader(n_samples=8)
+    torch.manual_seed(99)
+    val_loader = _make_loader(n_samples=8)
+
+    config = {
+        "lr": 1e-2,
+        "num_epochs": 30,
+        "grad_clip": 1.0,
+        "alpha": 0.0,
+        "beta": 0.0,
+        "patience": 2,
+    }
+
+    result = train(
+        model,
+        train_loader,
+        val_loader,
+        config,
+        torch.device("cpu"),
+        str(tmp_path),
+        log_style="line",
+    )
+
+    # Checkpoint should exist
+    checkpoint_path = tmp_path / "model.pt"
+    assert checkpoint_path.exists()
+
+    # The checkpoint epoch should be from the best epoch (before patience ran out),
+    # not the last epoch trained
+    checkpoint = torch.load(checkpoint_path, weights_only=False)
+    total_epochs = len(result["training_log"])
+    assert checkpoint["epoch"] < total_epochs, "Best checkpoint should not be the last epoch"

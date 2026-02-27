@@ -114,6 +114,8 @@ def train(
     use_tqdm = log_style == "tqdm"
 
     best_val_loss = float("inf")
+    no_improve_count = 0
+    patience = config.get("patience", 0)  # 0 = disabled
     training_log = []
     start_time = time.time()
 
@@ -239,7 +241,13 @@ def train(
         val_total = val_losses["total_loss"] if val_losses else epoch_losses["total_loss"]
         if val_total < best_val_loss:
             best_val_loss = val_total
+            no_improve_count = 0
             save_checkpoint(model, optimizer, epoch + 1, output_path / "model.pt")
+        else:
+            no_improve_count += 1
+            if patience > 0 and no_improve_count >= patience:
+                print(f"Early stopping: no improvement for {patience} epochs")
+                break
 
     elapsed = time.time() - start_time
     print(f"\nTraining complete in {elapsed:.1f}s")
