@@ -8,8 +8,11 @@ If the model outputs an illegal move, it's displayed as-is.
 
 import argparse
 import sys
+from datetime import datetime
+from pathlib import Path
 
 import chess
+import chess.pgn
 
 from chessgpt.cli.eval import load_model
 from chessgpt.inference.player import predict_next_move
@@ -55,12 +58,54 @@ def render_board(board: chess.Board, perspective: chess.Color) -> str:
     return "\n".join(lines)
 
 
+def save_pgn(
+    board: chess.Board,
+    model_path: str,
+    model_config,
+    player_color: chess.Color,
+    temperature: float,
+    top_k: int,
+) -> Path:
+    """Build a PGN from the board's move stack and save it to disk.
+
+    Returns the path to the saved PGN file.
+    """
+    game = chess.pgn.Game.from_board(board)
+
+    model_dir = Path(model_path).parent
+    model_name = model_dir.name
+    config_summary = f"d{model_config.d_model}_L{model_config.n_layers}_H{model_config.n_heads}"
+
+    white_name = "Human" if player_color == chess.WHITE else f"ChessGPT {model_name}"
+    black_name = "Human" if player_color == chess.BLACK else f"ChessGPT {model_name}"
+
+    now = datetime.now()
+    game.headers["Event"] = "ChessGPT Interactive"
+    game.headers["Date"] = now.strftime("%Y.%m.%d")
+    game.headers["White"] = white_name
+    game.headers["Black"] = black_name
+    game.headers["Result"] = board.result() if board.is_game_over() else "*"
+    game.headers["ChessGPTModel"] = str(model_path)
+    game.headers["ChessGPTConfig"] = config_summary
+    game.headers["ChessGPTTemperature"] = str(temperature)
+    game.headers["ChessGPTTopK"] = str(top_k)
+
+    games_dir = model_dir / "games"
+    games_dir.mkdir(parents=True, exist_ok=True)
+    filename = now.strftime("%Y%m%d_%H%M%S") + ".pgn"
+    output_path = games_dir / filename
+
+    output_path.write_text(str(game) + "\n")
+    return output_path
+
+
 def main():
     parser = argparse.ArgumentParser(description="Play chess against ChessGPT")
     parser.add_argument("--model", type=str, required=True, help="Path to model checkpoint")
     parser.add_argument("--color", choices=["white", "black"], default="white", help="Your color")
     parser.add_argument("--temperature", type=float, default=0.3, help="Sampling temperature")
     parser.add_argument("--top-k", type=int, default=5, help="Top-k sampling")
+    parser.add_argument("--no-save", action="store_true", help="Don't save PGN after the game")
     args = parser.parse_args()
 
     device = get_device()
@@ -72,6 +117,24 @@ def main():
     move_history: list[str] = []
     player_color = chess.WHITE if args.color == "white" else chess.BLACK
 
+    def _finish_game():
+        """Save PGN and print final state."""
+        print(render_board(board, player_color))
+        print(f"\nMoves: {' '.join(move_history)}")
+        if board.is_game_over():
+            print(f"Game over! Result: {board.result()}")
+        if not args.no_save and move_history:
+            pgn_path = save_pgn(
+                board,
+                args.model,
+                model.config,
+                player_color,
+                args.temperature,
+                args.top_k,
+            )
+            print(f"\nPGN saved to: {pgn_path}")
+            print(pgn_path.read_text())
+
     while not board.is_game_over():
         print(render_board(board, player_color))
         print(f"\nMoves: {' '.join(move_history)}")
@@ -82,6 +145,7 @@ def main():
                 move_str = input("\nYour move: ").strip()
                 if move_str.lower() == "quit":
                     print("Thanks for playing!")
+                    _finish_game()
                     sys.exit(0)
                 try:
                     board.push_san(move_str)
@@ -119,6 +183,7 @@ def main():
                 while True:
                     fix = input("  Override: ").strip()
                     if fix.lower() == "quit":
+                        _finish_game()
                         sys.exit(0)
                     try:
                         board.push_san(fix)
@@ -127,6 +192,4 @@ def main():
                     except (ValueError, chess.InvalidMoveError):
                         print(f"  Invalid: {fix}. Try again.")
 
-    print(render_board(board, player_color))
-    print(f"\nGame over! Result: {board.result()}")
-    print(f"Moves: {' '.join(move_history)}")
+    _finish_game()
