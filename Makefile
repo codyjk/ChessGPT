@@ -38,7 +38,7 @@ deploy-image:
 	@echo "Building and pushing Lambda container image..."
 	aws ecr get-login-password --region $(AWS_REGION) | \
 		docker login --username AWS --password-stdin $(ECR_URL)
-	docker build -t chessgpt-lambda -f infra/lambda/Dockerfile .
+	docker build --platform linux/arm64 -t chessgpt-lambda -f infra/lambda/Dockerfile .
 	docker tag chessgpt-lambda:latest $(ECR_URL):latest
 	docker push $(ECR_URL):latest
 

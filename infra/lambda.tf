@@ -3,6 +3,7 @@ resource "aws_lambda_function" "download" {
   role          = aws_iam_role.lambda.arn
   package_type  = "Image"
   image_uri     = "${aws_ecr_repository.lambda.repository_url}:latest"
+  architectures = ["arm64"]
   timeout       = 900 # 15 minutes
   memory_size   = 512
 
@@ -20,8 +21,9 @@ resource "aws_lambda_function" "prepare" {
   role          = aws_iam_role.lambda.arn
   package_type  = "Image"
   image_uri     = "${aws_ecr_repository.lambda.repository_url}:latest"
+  architectures = ["arm64"]
   timeout       = 900 # 15 minutes
-  memory_size   = 2048
+  memory_size   = 3008
 
   ephemeral_storage {
     size = 10240 # 10 GB
