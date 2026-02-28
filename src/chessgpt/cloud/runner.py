@@ -104,6 +104,38 @@ def _resolve_data_files(project_root: Path) -> list[Path]:
     return files
 
 
+def _build_aws_env() -> str:
+    """Build an env-var prefix string for SSH commands that need AWS credentials.
+
+    Reads AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, and
+    optionally AWS_SESSION_TOKEN from the local environment. Credentials are
+    passed inline -- never written to disk on the pod.
+
+    Raises:
+        RuntimeError: If required credentials are missing.
+    """
+    key_id = os.environ.get("AWS_ACCESS_KEY_ID", "")
+    secret = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+    region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+    session_token = os.environ.get("AWS_SESSION_TOKEN", "")
+
+    if not key_id or not secret:
+        raise RuntimeError(
+            "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set in your "
+            "environment to use --s3-data. Export them or add them to .env."
+        )
+
+    parts = [
+        f"AWS_ACCESS_KEY_ID={shlex.quote(key_id)}",
+        f"AWS_SECRET_ACCESS_KEY={shlex.quote(secret)}",
+        f"AWS_DEFAULT_REGION={shlex.quote(region)}",
+    ]
+    if session_token:
+        parts.append(f"AWS_SESSION_TOKEN={shlex.quote(session_token)}")
+
+    return " ".join(parts)
+
+
 def _check_training_done(
     client: paramiko.SSHClient,
 ) -> tuple[bool, int | None]:
@@ -129,6 +161,7 @@ def run_cloud_train(
     gpu_count: int = 1,
     disk_gb: int = 50,
     project_root: Path | None = None,
+    s3_data: str | None = None,
 ) -> None:
     """Provision a cloud GPU, upload code, and launch training in a detached tmux session.
 
@@ -146,9 +179,18 @@ def run_cloud_train(
         gpu_count: Number of GPUs to request.
         disk_gb: Disk space in GB.
         project_root: Local project root (auto-detected if None).
+        s3_data: S3 URI for training data. Pod pulls from S3 instead of SCP upload.
     """
     if project_root is None:
         project_root = Path.cwd()
+
+    # Pre-flight checks before spending money on a pod
+    if s3_data:
+        if not s3_data.startswith("s3://"):
+            raise ValueError(
+                f"--s3-data must be an S3 URI (e.g. s3://bucket/merged/), got: {s3_data}"
+            )
+        _build_aws_env()  # validates credentials are set
 
     # Block if a pod is already active
     existing = load_state(project_root)
@@ -169,11 +211,14 @@ def run_cloud_train(
     instance_info = None
     client = None
 
+    total_steps = 6 if s3_data else 5
     print(f"Cloud training: {experiment_name} ({config_size}) on {provider.name}/{gpu_type}")
+    if s3_data:
+        print(f"  Data source: {s3_data}")
 
     try:
         # Step 1: Provision
-        print(f"\n[1/5] Provisioning {gpu_type} on {provider.name}...")
+        print(f"\n[1/{total_steps}] Provisioning {gpu_type} on {provider.name}...")
         instance_info = provider.provision(spec)
         print(
             f"  Instance {instance_info.instance_id} ready "
@@ -182,7 +227,7 @@ def run_cloud_train(
         print(f"  Cost: ${instance_info.cost_per_hour:.2f}/hr")
 
         # Step 2: Connect
-        print("\n[2/5] Connecting via SSH...")
+        print(f"\n[2/{total_steps}] Connecting via SSH...")
         client = ssh.connect(
             host=instance_info.host,
             port=instance_info.port,
@@ -192,12 +237,12 @@ def run_cloud_train(
         print("  Connected.")
 
         # Step 3: Upload
-        print("\n[3/5] Uploading project files...")
-        file_count = _upload_project(client, project_root)
+        print(f"\n[3/{total_steps}] Uploading project files...")
+        file_count = _upload_project(client, project_root, skip_data=bool(s3_data))
         print(f"  Uploaded {file_count} files.")
 
         # Step 4: Install dependencies + tmux
-        print("\n[4/5] Installing dependencies...")
+        print(f"\n[4/{total_steps}] Installing dependencies...")
         ssh.run_command(
             client,
             f"cd {REMOTE_PROJECT_DIR} && pip install -e . 2>&1",
@@ -208,8 +253,28 @@ def run_cloud_train(
             stream=False,
         )
 
-        # Step 5: Launch training in detached tmux
-        print(f"\n[5/5] Launching training in tmux session '{TMUX_SESSION}'...")
+        # Step 5 (optional): Pull data from S3
+        next_step = 5
+        if s3_data:
+            print(f"\n[5/{total_steps}] Pulling data from S3...")
+            aws_env = _build_aws_env()
+            s3_cmd = (
+                f"pip install -q awscli && "
+                f"{aws_env} aws s3 sync {shlex.quote(s3_data)} "
+                f"{REMOTE_PROJECT_DIR}/data/ --quiet"
+            )
+            try:
+                ssh.run_command(client, s3_cmd)
+            except RuntimeError:
+                raise RuntimeError(
+                    f"Failed to pull data from S3 ({s3_data}). "
+                    "Check credentials and bucket permissions."
+                ) from None
+            next_step = 6
+
+        # Final step: Launch training in detached tmux
+        launch_label = f"[{next_step}/{total_steps}]"
+        print(f"\n{launch_label} Launching training in tmux session '{TMUX_SESSION}'...")
         remote_output = f"{REMOTE_PROJECT_DIR}/out"
         train_cmd = (
             f"cd {REMOTE_PROJECT_DIR} && "
@@ -547,12 +612,15 @@ def run_cloud_eval(
 def _upload_project(
     client: paramiko.SSHClient,
     project_root: Path,
+    *,
+    skip_data: bool = False,
 ) -> int:
     """Upload source code, configs, and data to the remote instance.
 
     Args:
         client: Connected SSH/SFTP client.
         project_root: Local project root directory.
+        skip_data: If True, skip uploading data files (used when data comes from S3).
 
     Returns:
         Number of files uploaded.
@@ -570,12 +638,13 @@ def _upload_project(
             total += 1
 
     # Upload data files (CSVs, tokenizer JSON -- not PGNs)
-    data_files = _resolve_data_files(project_root)
-    for data_file in data_files:
-        rel = data_file.relative_to(project_root)
-        remote_path = f"{REMOTE_PROJECT_DIR}/{rel.as_posix()}"
-        ssh.upload_file(client, data_file, remote_path)
-        total += 1
+    if not skip_data:
+        data_files = _resolve_data_files(project_root)
+        for data_file in data_files:
+            rel = data_file.relative_to(project_root)
+            remote_path = f"{REMOTE_PROJECT_DIR}/{rel.as_posix()}"
+            ssh.upload_file(client, data_file, remote_path)
+            total += 1
 
     return total
 

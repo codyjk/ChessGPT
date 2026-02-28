@@ -38,7 +38,7 @@ from chessgpt.cloud.provider import (
     ProviderStatus,
 )
 from chessgpt.cloud.providers import get_provider, list_providers
-from chessgpt.cloud.runner import _detect_config_size, _merge_jsonl
+from chessgpt.cloud.runner import _build_aws_env, _detect_config_size, _merge_jsonl
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -1513,3 +1513,357 @@ class TestGpuOfferIsolation:
         b = GpuOffer(gpu_type="B", gpu_count=1, cost_per_hour=2.0)
         a.extra["key"] = "value"
         assert "key" not in b.extra
+
+
+# ---------------------------------------------------------------------------
+# _build_aws_env tests
+# ---------------------------------------------------------------------------
+
+
+class TestBuildAwsEnv:
+    def test_basic_credentials(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should produce env-var prefix with key, secret, and region."""
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret123")
+        monkeypatch.setenv("AWS_DEFAULT_REGION", "us-west-2")
+        monkeypatch.delenv("AWS_SESSION_TOKEN", raising=False)
+
+        result = _build_aws_env()
+        assert "AWS_ACCESS_KEY_ID=" in result
+        assert "AKIAEXAMPLE" in result
+        assert "AWS_SECRET_ACCESS_KEY=" in result
+        assert "secret123" in result
+        assert "AWS_DEFAULT_REGION=" in result
+        assert "us-west-2" in result
+        assert "AWS_SESSION_TOKEN" not in result
+
+    def test_default_region(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should default to us-east-1 when no region is set."""
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret123")
+        monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
+        monkeypatch.delenv("AWS_SESSION_TOKEN", raising=False)
+
+        result = _build_aws_env()
+        assert "us-east-1" in result
+
+    def test_session_token_included(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should include AWS_SESSION_TOKEN when set (temporary credentials)."""
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret123")
+        monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+        monkeypatch.setenv("AWS_SESSION_TOKEN", "FwoGZX...")
+
+        result = _build_aws_env()
+        assert "AWS_SESSION_TOKEN=" in result
+        assert "FwoGZX..." in result
+
+    def test_missing_key_id_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should raise RuntimeError when AWS_ACCESS_KEY_ID is missing."""
+        monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret123")
+
+        with pytest.raises(RuntimeError, match="AWS_ACCESS_KEY_ID"):
+            _build_aws_env()
+
+    def test_missing_secret_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should raise RuntimeError when AWS_SECRET_ACCESS_KEY is missing."""
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
+        monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+
+        with pytest.raises(RuntimeError, match="AWS_SECRET_ACCESS_KEY"):
+            _build_aws_env()
+
+    def test_both_missing_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should raise RuntimeError when both credentials are missing."""
+        monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+        monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+
+        with pytest.raises(RuntimeError):
+            _build_aws_env()
+
+
+# ---------------------------------------------------------------------------
+# S3 data path in run_cloud_train tests
+# ---------------------------------------------------------------------------
+
+
+class TestRunCloudTrainS3:
+    """Tests for the --s3-data code path in run_cloud_train."""
+
+    def test_invalid_s3_uri_raises(self, tmp_path: Path) -> None:
+        """Should reject non-s3:// URIs before provisioning."""
+        from chessgpt.cloud.runner import run_cloud_train
+
+        provider = FakeProvider()
+
+        with pytest.raises(ValueError, match="must be an S3 URI"):
+            run_cloud_train(
+                config_path="configs/tiny.toml",
+                experiment_name="test",
+                provider=provider,
+                gpu_type="A100",
+                project_root=tmp_path,
+                s3_data="./data/train.csv",
+            )
+
+        # No pod should have been provisioned
+        assert len(provider.provisioned) == 0
+
+    def test_missing_aws_creds_raises_before_provision(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Should fail on missing credentials before provisioning a pod."""
+        from chessgpt.cloud.runner import run_cloud_train
+
+        monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+        monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+        provider = FakeProvider()
+
+        with pytest.raises(RuntimeError, match="AWS_ACCESS_KEY_ID"):
+            run_cloud_train(
+                config_path="configs/tiny.toml",
+                experiment_name="test",
+                provider=provider,
+                gpu_type="A100",
+                project_root=tmp_path,
+                s3_data="s3://bucket/merged/",
+            )
+
+        # No pod should have been provisioned
+        assert len(provider.provisioned) == 0
+
+    @patch("chessgpt.cloud.runner.save_state")
+    @patch("chessgpt.cloud.runner.load_state", return_value=None)
+    @patch("chessgpt.cloud.runner.ssh")
+    @patch("chessgpt.cloud.runner._resolve_data_files")
+    def test_s3_data_skips_data_upload_and_syncs(
+        self,
+        mock_resolve: MagicMock,
+        mock_ssh: MagicMock,
+        mock_load: MagicMock,
+        mock_save: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """With s3_data set, data upload is skipped and S3 sync runs."""
+        from chessgpt.cloud.runner import run_cloud_train
+
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret123")
+        monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+
+        provider = FakeProvider()
+        mock_resolve.return_value = []
+        mock_client = MagicMock()
+        mock_ssh.connect.return_value = mock_client
+        mock_ssh.upload_directory.return_value = 10
+        mock_ssh.run_command.return_value = (0, "", "")
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "d.py").write_text("")
+        (tmp_path / "configs").mkdir()
+        (tmp_path / "pyproject.toml").write_text("")
+
+        run_cloud_train(
+            config_path="configs/tiny.toml",
+            experiment_name="s3_test",
+            provider=provider,
+            gpu_type="A100",
+            project_root=tmp_path,
+            s3_data="s3://my-bucket/merged/",
+        )
+
+        # Should have 4 SSH commands: install deps, install tmux, s3 sync, tmux launch
+        assert mock_ssh.run_command.call_count == 4
+
+        # Third call should be the S3 sync (not contain credentials in the pip part)
+        s3_call = mock_ssh.run_command.call_args_list[2]
+        s3_cmd = s3_call[0][1]
+        assert "aws s3 sync" in s3_cmd
+        assert "s3://my-bucket/merged/" in s3_cmd
+        assert "pip install -q awscli" in s3_cmd
+
+        # Data files should NOT have been uploaded via SCP
+        mock_resolve.assert_not_called()
+
+    @patch("chessgpt.cloud.runner.load_state", return_value=None)
+    @patch("chessgpt.cloud.runner.ssh")
+    @patch("chessgpt.cloud.runner._resolve_data_files")
+    def test_s3_sync_failure_redacts_credentials(
+        self,
+        mock_resolve: MagicMock,
+        mock_ssh: MagicMock,
+        mock_load: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """S3 sync failure should produce a clean error without credentials."""
+        from chessgpt.cloud.runner import run_cloud_train
+
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "SUPERSECRET")
+        monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+
+        provider = FakeProvider()
+        mock_resolve.return_value = []
+        mock_client = MagicMock()
+        mock_ssh.connect.return_value = mock_client
+        mock_ssh.upload_directory.return_value = 10
+
+        # First two commands (install deps, tmux) succeed; third (S3 sync) fails
+        mock_ssh.run_command.side_effect = [
+            (0, "", ""),  # pip install -e .
+            (0, "", ""),  # tmux install
+            RuntimeError("Command failed: AWS_SECRET=... aws s3 sync"),
+        ]
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "d.py").write_text("")
+        (tmp_path / "configs").mkdir()
+        (tmp_path / "pyproject.toml").write_text("")
+
+        with pytest.raises(RuntimeError, match="Failed to pull data from S3") as exc_info:
+            run_cloud_train(
+                config_path="configs/tiny.toml",
+                experiment_name="s3_fail",
+                provider=provider,
+                gpu_type="A100",
+                project_root=tmp_path,
+                s3_data="s3://bad-bucket/merged/",
+            )
+
+        # The error message should NOT contain the secret key
+        error_msg = str(exc_info.value)
+        assert "SUPERSECRET" not in error_msg
+        assert "bad-bucket" in error_msg
+
+        # Pod should be deprovisioned on failure
+        assert len(provider.deprovisioned) == 1
+
+
+# ---------------------------------------------------------------------------
+# _upload_project skip_data tests
+# ---------------------------------------------------------------------------
+
+
+class TestUploadProjectSkipData:
+    @patch("chessgpt.cloud.runner.ssh")
+    @patch("chessgpt.cloud.runner._resolve_data_files")
+    def test_skip_data_true_skips_data_files(
+        self,
+        mock_resolve: MagicMock,
+        mock_ssh: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """With skip_data=True, data files are not uploaded."""
+        from chessgpt.cloud.runner import _upload_project
+
+        mock_client = MagicMock()
+        mock_ssh.upload_directory.return_value = 5
+        mock_ssh.upload_file.return_value = None
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "configs").mkdir()
+        (tmp_path / "pyproject.toml").write_text("")
+
+        _upload_project(mock_client, tmp_path, skip_data=True)
+
+        # _resolve_data_files should NOT be called
+        mock_resolve.assert_not_called()
+
+    @patch("chessgpt.cloud.runner.ssh")
+    @patch("chessgpt.cloud.runner._resolve_data_files")
+    def test_skip_data_false_uploads_data_files(
+        self,
+        mock_resolve: MagicMock,
+        mock_ssh: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """With skip_data=False (default), data files are uploaded."""
+        from chessgpt.cloud.runner import _upload_project
+
+        mock_client = MagicMock()
+        mock_ssh.upload_directory.return_value = 5
+        mock_ssh.upload_file.return_value = None
+        mock_resolve.return_value = [tmp_path / "data" / "train.csv"]
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "configs").mkdir()
+        (tmp_path / "pyproject.toml").write_text("")
+        (tmp_path / "data").mkdir()
+        (tmp_path / "data" / "train.csv").write_text("")
+
+        _upload_project(mock_client, tmp_path, skip_data=False)
+
+        mock_resolve.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# CLI --s3-data parsing tests
+# ---------------------------------------------------------------------------
+
+
+class TestCliS3DataParsing:
+    def _parse(self, args: list[str]) -> object:
+        from chessgpt.cli.cloud import _build_parser
+
+        return _build_parser().parse_args(args)
+
+    def test_s3_data_parsed(self) -> None:
+        """--s3-data should be parsed and accessible as s3_data."""
+        args = self._parse(
+            [
+                "train",
+                "--provider",
+                "runpod",
+                "--gpu",
+                "A100",
+                "--config",
+                "configs/large.toml",
+                "--name",
+                "large_v1",
+                "--s3-data",
+                "s3://my-bucket/merged/",
+            ]
+        )
+        assert args.s3_data == "s3://my-bucket/merged/"
+
+    def test_s3_data_defaults_to_none(self) -> None:
+        """Without --s3-data, the value should be None."""
+        args = self._parse(
+            [
+                "train",
+                "--provider",
+                "runpod",
+                "--gpu",
+                "A100",
+                "--config",
+                "configs/large.toml",
+                "--name",
+                "large_v1",
+            ]
+        )
+        assert args.s3_data is None
+
+
+# ---------------------------------------------------------------------------
+# _derive_val_path tests
+# ---------------------------------------------------------------------------
+
+
+class TestDeriveValPath:
+    def test_standard_train_name(self) -> None:
+        from chessgpt.cli.prepare import _derive_val_path
+
+        assert _derive_val_path("data/train_large.csv") == "data/val_large.csv"
+
+    def test_no_train_in_name(self) -> None:
+        from chessgpt.cli.prepare import _derive_val_path
+
+        assert _derive_val_path("data/games.csv") == "data/games_val.csv"
+
+    def test_train_csv(self) -> None:
+        from chessgpt.cli.prepare import _derive_val_path
+
+        assert _derive_val_path("data/train.csv") == "data/val.csv"

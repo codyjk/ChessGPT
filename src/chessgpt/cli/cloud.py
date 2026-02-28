@@ -75,6 +75,7 @@ def _cmd_train(args: argparse.Namespace) -> None:
         gpu_type=args.gpu,
         gpu_count=args.gpu_count,
         disk_gb=args.disk_gb,
+        s3_data=args.s3_data,
     )
 
 
@@ -145,6 +146,13 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_common_args(train_parser)
     train_parser.add_argument("--config", type=str, required=True, help="Path to TOML config file")
     train_parser.add_argument("--name", type=str, required=True, help="Experiment name")
+    train_parser.add_argument(
+        "--s3-data",
+        type=str,
+        default=None,
+        help="S3 URI for training data (e.g. s3://bucket/merged/). "
+        "Pod pulls data from S3 instead of SCP.",
+    )
 
     # eval
     eval_parser = subparsers.add_parser("eval", help="Evaluate a model on a cloud GPU")

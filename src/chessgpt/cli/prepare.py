@@ -10,6 +10,18 @@ from chessgpt.data.prepare import prepare_training_data, print_stats
 from chessgpt.model.tokenizer import ChessTokenizer
 
 
+def _derive_val_path(output_csv: str) -> str:
+    """Derive the validation CSV path from the training CSV path.
+
+    'data/train_large.csv' -> 'data/val_large.csv'
+    'data/games.csv' -> 'data/games_val.csv'
+    """
+    output_path = Path(output_csv)
+    train_stem = output_path.stem
+    val_stem = train_stem.replace("train", "val") if "train" in train_stem else train_stem + "_val"
+    return str(output_path.with_stem(val_stem))
+
+
 def _invoke_lambda(
     year: int, month: int, bucket: str, min_elo: int, function_name: str, region: str | None
 ) -> None:
@@ -92,12 +104,7 @@ def _merge_from_s3(
     print(f"Train: {len(train_rows)} games -> {output_csv}")
 
     # Write val CSV (same directory, derive name from train filename)
-    train_stem = output_path.stem
-    if "train" in train_stem:
-        val_stem = train_stem.replace("train", "val")
-    else:
-        val_stem = train_stem + "_val"
-    val_csv = str(output_path.with_stem(val_stem))
+    val_csv = _derive_val_path(output_csv)
     with open(val_csv, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(header)
@@ -110,6 +117,35 @@ def _merge_from_s3(
         tokenizer = ChessTokenizer.fit(output_csv)
         tokenizer.save(fit_tokenizer)
         print(f"Tokenizer saved to {fit_tokenizer} (vocab_size={tokenizer.vocab_size})")
+
+
+def _upload_merged(
+    output_csv: str, fit_tokenizer: str | None, bucket: str, region: str | None
+) -> None:
+    """Upload merged train CSV, val CSV, and tokenizer to s3://bucket/merged/."""
+    import boto3
+
+    s3 = boto3.client("s3", **({"region_name": region} if region else {}))
+
+    val_csv = _derive_val_path(output_csv)
+
+    files_to_upload: list[tuple[str, str]] = [
+        (output_csv, f"merged/{Path(output_csv).name}"),
+        (val_csv, f"merged/{Path(val_csv).name}"),
+    ]
+    if fit_tokenizer:
+        files_to_upload.append((fit_tokenizer, f"merged/{Path(fit_tokenizer).name}"))
+
+    uploaded = 0
+    for local_path, s3_key in files_to_upload:
+        if not Path(local_path).exists():
+            print(f"  Warning: {local_path} not found, skipping upload")
+            continue
+        print(f"  Uploading {local_path} -> s3://{bucket}/{s3_key}")
+        s3.upload_file(local_path, bucket, s3_key)
+        uploaded += 1
+
+    print(f"Uploaded {uploaded} files to s3://{bucket}/merged/")
 
 
 def main():
@@ -151,7 +187,15 @@ def main():
     parser.add_argument(
         "--region", type=str, default=None, help="AWS region (default: from AWS config)"
     )
+    parser.add_argument(
+        "--upload-merged",
+        action="store_true",
+        help="After merging, upload train/val CSV and tokenizer to s3://bucket/merged/",
+    )
     args = parser.parse_args()
+
+    if args.upload_merged and not args.merge_from_s3:
+        parser.error("--upload-merged requires --merge-from-s3")
 
     if args.cloud:
         if not args.bucket:
@@ -171,6 +215,9 @@ def main():
         if not args.output_csv:
             parser.error("--merge-from-s3 requires --output-csv")
         _merge_from_s3(args.year, args.bucket, args.output_csv, args.fit_tokenizer, args.val_split)
+        if args.upload_merged:
+            print("\nUploading merged data to S3...")
+            _upload_merged(args.output_csv, args.fit_tokenizer, args.bucket, args.region)
         return
 
     # Local mode

@@ -1,4 +1,4 @@
-.PHONY: setup lint format test check clean deploy-plan deploy logs
+.PHONY: setup lint format test check clean deploy-plan deploy logs upload-data
 
 # Default target: full project setup
 setup:
@@ -23,6 +23,20 @@ check: lint
 clean:
 	rm -rf dist/ build/ *.egg-info .pytest_cache .ruff_cache
 	find . -type d -name __pycache__ -exec rm -rf {} +
+
+# --- Upload merged training data to S3 ---
+# Requires: BUCKET is set (e.g. make upload-data BUCKET=chessgpt-data-chessgpt-l3vmmk)
+
+upload-data:
+	@if [ -z "$(BUCKET)" ]; then \
+		echo "Error: BUCKET is required. Usage: make upload-data BUCKET=<bucket-name>"; \
+		exit 1; \
+	fi
+	uv run chessgpt-prepare --merge-from-s3 --year 2017 \
+		--bucket $(BUCKET) \
+		--output-csv data/train_large.csv \
+		--fit-tokenizer data/tokenizer_large.json \
+		--upload-merged --region us-east-1
 
 # --- AWS Lambda deployment ---
 # Requires: terraform apply has been run at least once to create ECR repo
