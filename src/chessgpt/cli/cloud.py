@@ -75,7 +75,8 @@ def _cmd_train(args: argparse.Namespace) -> None:
         gpu_type=args.gpu,
         gpu_count=args.gpu_count,
         disk_gb=args.disk_gb,
-        s3_data=args.s3_data,
+        s3_bucket=args.s3_bucket,
+        s3_year=args.s3_year,
     )
 
 
@@ -147,11 +148,16 @@ def _build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--config", type=str, required=True, help="Path to TOML config file")
     train_parser.add_argument("--name", type=str, required=True, help="Experiment name")
     train_parser.add_argument(
-        "--s3-data",
+        "--s3-bucket",
         type=str,
         default=None,
-        help="S3 URI for training data (e.g. s3://bucket/merged/). "
-        "Pod pulls data from S3 instead of SCP.",
+        help="S3 bucket containing prepared CSVs. Pod merges data from S3 instead of SCP upload.",
+    )
+    train_parser.add_argument(
+        "--s3-year",
+        type=int,
+        default=None,
+        help="Year of prepared data to merge from S3 (e.g. 2017).",
     )
 
     # eval

@@ -38,7 +38,12 @@ from chessgpt.cloud.provider import (
     ProviderStatus,
 )
 from chessgpt.cloud.providers import get_provider, list_providers
-from chessgpt.cloud.runner import _build_aws_env, _detect_config_size, _merge_jsonl
+from chessgpt.cloud.runner import (
+    _build_aws_env,
+    _detect_config_size,
+    _merge_jsonl,
+    _read_data_paths,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -1584,30 +1589,47 @@ class TestBuildAwsEnv:
 
 
 # ---------------------------------------------------------------------------
-# S3 data path in run_cloud_train tests
+# S3 merge path in run_cloud_train tests
 # ---------------------------------------------------------------------------
 
 
 class TestRunCloudTrainS3:
-    """Tests for the --s3-data code path in run_cloud_train."""
+    """Tests for the --s3-bucket/--s3-year code path in run_cloud_train."""
 
-    def test_invalid_s3_uri_raises(self, tmp_path: Path) -> None:
-        """Should reject non-s3:// URIs before provisioning."""
+    def test_s3_bucket_without_year_raises(self, tmp_path: Path) -> None:
+        """Should reject --s3-bucket without --s3-year before provisioning."""
         from chessgpt.cloud.runner import run_cloud_train
 
         provider = FakeProvider()
 
-        with pytest.raises(ValueError, match="must be an S3 URI"):
+        with pytest.raises(ValueError, match="must both be provided"):
             run_cloud_train(
                 config_path="configs/tiny.toml",
                 experiment_name="test",
                 provider=provider,
                 gpu_type="A100",
                 project_root=tmp_path,
-                s3_data="./data/train.csv",
+                s3_bucket="my-bucket",
             )
 
-        # No pod should have been provisioned
+        assert len(provider.provisioned) == 0
+
+    def test_s3_year_without_bucket_raises(self, tmp_path: Path) -> None:
+        """Should reject --s3-year without --s3-bucket before provisioning."""
+        from chessgpt.cloud.runner import run_cloud_train
+
+        provider = FakeProvider()
+
+        with pytest.raises(ValueError, match="must both be provided"):
+            run_cloud_train(
+                config_path="configs/tiny.toml",
+                experiment_name="test",
+                provider=provider,
+                gpu_type="A100",
+                project_root=tmp_path,
+                s3_year=2017,
+            )
+
         assert len(provider.provisioned) == 0
 
     def test_missing_aws_creds_raises_before_provision(
@@ -1627,17 +1649,17 @@ class TestRunCloudTrainS3:
                 provider=provider,
                 gpu_type="A100",
                 project_root=tmp_path,
-                s3_data="s3://bucket/merged/",
+                s3_bucket="my-bucket",
+                s3_year=2017,
             )
 
-        # No pod should have been provisioned
         assert len(provider.provisioned) == 0
 
     @patch("chessgpt.cloud.runner.save_state")
     @patch("chessgpt.cloud.runner.load_state", return_value=None)
     @patch("chessgpt.cloud.runner.ssh")
     @patch("chessgpt.cloud.runner._resolve_data_files")
-    def test_s3_data_skips_data_upload_and_syncs(
+    def test_s3_merge_skips_data_upload_and_runs_merge(
         self,
         mock_resolve: MagicMock,
         mock_ssh: MagicMock,
@@ -1646,7 +1668,7 @@ class TestRunCloudTrainS3:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """With s3_data set, data upload is skipped and S3 sync runs."""
+        """With s3_bucket/s3_year, data upload is skipped and merge runs on pod."""
         from chessgpt.cloud.runner import run_cloud_train
 
         monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
@@ -1660,29 +1682,45 @@ class TestRunCloudTrainS3:
         mock_ssh.upload_directory.return_value = 10
         mock_ssh.run_command.return_value = (0, "", "")
 
+        # Create minimal config with data paths
         (tmp_path / "src").mkdir()
         (tmp_path / "src" / "d.py").write_text("")
         (tmp_path / "configs").mkdir()
+        (tmp_path / "configs" / "large.toml").write_text(
+            "[data]\n"
+            'training_file = "data/train_large.csv"\n'
+            'tokenizer_file = "data/tokenizer_large.json"\n'
+        )
         (tmp_path / "pyproject.toml").write_text("")
 
         run_cloud_train(
-            config_path="configs/tiny.toml",
+            config_path="configs/large.toml",
             experiment_name="s3_test",
             provider=provider,
             gpu_type="A100",
             project_root=tmp_path,
-            s3_data="s3://my-bucket/merged/",
+            s3_bucket="my-bucket",
+            s3_year=2017,
         )
 
-        # Should have 4 SSH commands: install deps, install tmux, s3 sync, tmux launch
+        # Should have 4 SSH commands: install deps, install tmux, merge, tmux launch
         assert mock_ssh.run_command.call_count == 4
 
-        # Third call should be the S3 sync (not contain credentials in the pip part)
-        s3_call = mock_ssh.run_command.call_args_list[2]
-        s3_cmd = s3_call[0][1]
-        assert "aws s3 sync" in s3_cmd
-        assert "s3://my-bucket/merged/" in s3_cmd
-        assert "pip install -q awscli" in s3_cmd
+        # Install command should use .[aws]
+        install_call = mock_ssh.run_command.call_args_list[0]
+        install_cmd = install_call[0][1]
+        assert '".[aws]"' in install_cmd
+
+        # Third call should be the merge command
+        merge_call = mock_ssh.run_command.call_args_list[2]
+        merge_cmd = merge_call[0][1]
+        assert "chessgpt-prepare --merge-from-s3" in merge_cmd
+        assert "--year 2017" in merge_cmd
+        assert "--bucket my-bucket" in merge_cmd
+        assert "--output-csv" in merge_cmd
+        assert "train_large.csv" in merge_cmd
+        assert "--fit-tokenizer" in merge_cmd
+        assert "tokenizer_large.json" in merge_cmd
 
         # Data files should NOT have been uploaded via SCP
         mock_resolve.assert_not_called()
@@ -1690,7 +1728,7 @@ class TestRunCloudTrainS3:
     @patch("chessgpt.cloud.runner.load_state", return_value=None)
     @patch("chessgpt.cloud.runner.ssh")
     @patch("chessgpt.cloud.runner._resolve_data_files")
-    def test_s3_sync_failure_redacts_credentials(
+    def test_s3_merge_failure_redacts_credentials(
         self,
         mock_resolve: MagicMock,
         mock_ssh: MagicMock,
@@ -1698,7 +1736,7 @@ class TestRunCloudTrainS3:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """S3 sync failure should produce a clean error without credentials."""
+        """S3 merge failure should produce a clean error without credentials."""
         from chessgpt.cloud.runner import run_cloud_train
 
         monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
@@ -1711,29 +1749,34 @@ class TestRunCloudTrainS3:
         mock_ssh.connect.return_value = mock_client
         mock_ssh.upload_directory.return_value = 10
 
-        # First two commands (install deps, tmux) succeed; third (S3 sync) fails
+        # First two commands (install deps, tmux) succeed; third (merge) fails
         mock_ssh.run_command.side_effect = [
-            (0, "", ""),  # pip install -e .
+            (0, "", ""),  # pip install -e ".[aws]"
             (0, "", ""),  # tmux install
-            RuntimeError("Command failed: AWS_SECRET=... aws s3 sync"),
+            RuntimeError("Command failed: AWS_SECRET=... chessgpt-prepare"),
         ]
 
         (tmp_path / "src").mkdir()
         (tmp_path / "src" / "d.py").write_text("")
         (tmp_path / "configs").mkdir()
+        (tmp_path / "configs" / "large.toml").write_text(
+            "[data]\n"
+            'training_file = "data/train_large.csv"\n'
+            'tokenizer_file = "data/tokenizer_large.json"\n'
+        )
         (tmp_path / "pyproject.toml").write_text("")
 
-        with pytest.raises(RuntimeError, match="Failed to pull data from S3") as exc_info:
+        with pytest.raises(RuntimeError, match="Failed to merge data from S3") as exc_info:
             run_cloud_train(
-                config_path="configs/tiny.toml",
+                config_path="configs/large.toml",
                 experiment_name="s3_fail",
                 provider=provider,
                 gpu_type="A100",
                 project_root=tmp_path,
-                s3_data="s3://bad-bucket/merged/",
+                s3_bucket="bad-bucket",
+                s3_year=2017,
             )
 
-        # The error message should NOT contain the secret key
         error_msg = str(exc_info.value)
         assert "SUPERSECRET" not in error_msg
         assert "bad-bucket" in error_msg
@@ -1800,18 +1843,18 @@ class TestUploadProjectSkipData:
 
 
 # ---------------------------------------------------------------------------
-# CLI --s3-data parsing tests
+# CLI --s3-bucket/--s3-year parsing tests
 # ---------------------------------------------------------------------------
 
 
-class TestCliS3DataParsing:
+class TestCliS3ArgsParsing:
     def _parse(self, args: list[str]) -> object:
         from chessgpt.cli.cloud import _build_parser
 
         return _build_parser().parse_args(args)
 
-    def test_s3_data_parsed(self) -> None:
-        """--s3-data should be parsed and accessible as s3_data."""
+    def test_s3_bucket_and_year_parsed(self) -> None:
+        """--s3-bucket and --s3-year should be parsed correctly."""
         args = self._parse(
             [
                 "train",
@@ -1823,14 +1866,17 @@ class TestCliS3DataParsing:
                 "configs/large.toml",
                 "--name",
                 "large_v1",
-                "--s3-data",
-                "s3://my-bucket/merged/",
+                "--s3-bucket",
+                "my-bucket",
+                "--s3-year",
+                "2017",
             ]
         )
-        assert args.s3_data == "s3://my-bucket/merged/"
+        assert args.s3_bucket == "my-bucket"
+        assert args.s3_year == 2017
 
-    def test_s3_data_defaults_to_none(self) -> None:
-        """Without --s3-data, the value should be None."""
+    def test_s3_args_default_to_none(self) -> None:
+        """Without --s3-bucket/--s3-year, both should be None."""
         args = self._parse(
             [
                 "train",
@@ -1844,7 +1890,35 @@ class TestCliS3DataParsing:
                 "large_v1",
             ]
         )
-        assert args.s3_data is None
+        assert args.s3_bucket is None
+        assert args.s3_year is None
+
+
+# ---------------------------------------------------------------------------
+# _read_data_paths tests
+# ---------------------------------------------------------------------------
+
+
+class TestReadDataPaths:
+    def test_reads_data_section(self, tmp_path: Path) -> None:
+        """Should extract training_file and tokenizer_file from TOML config."""
+        config = tmp_path / "large.toml"
+        config.write_text(
+            "[data]\n"
+            'training_file = "data/train_large.csv"\n'
+            'tokenizer_file = "data/tokenizer_large.json"\n'
+        )
+        result = _read_data_paths(str(config))
+        assert result.training_file == "data/train_large.csv"
+        assert result.tokenizer_file == "data/tokenizer_large.json"
+
+    def test_defaults_when_no_data_section(self, tmp_path: Path) -> None:
+        """Should return defaults when [data] section is missing."""
+        config = tmp_path / "minimal.toml"
+        config.write_text("[model]\nd_model = 128\n")
+        result = _read_data_paths(str(config))
+        assert result.training_file == "data/train.csv"
+        assert result.tokenizer_file == "data/tokenizer.json"
 
 
 # ---------------------------------------------------------------------------

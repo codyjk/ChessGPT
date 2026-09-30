@@ -14,6 +14,8 @@ import json
 import os
 import shlex
 import sys
+import tomllib
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -122,7 +124,7 @@ def _build_aws_env() -> str:
     if not key_id or not secret:
         raise RuntimeError(
             "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set in your "
-            "environment to use --s3-data. Export them or add them to .env."
+            "environment to use --s3-bucket. Export them or add them to .env."
         )
 
     parts = [
@@ -134,6 +136,28 @@ def _build_aws_env() -> str:
         parts.append(f"AWS_SESSION_TOKEN={shlex.quote(session_token)}")
 
     return " ".join(parts)
+
+
+@dataclass
+class _DataPaths:
+    """Data file paths parsed from a TOML config."""
+
+    training_file: str
+    tokenizer_file: str
+
+
+def _read_data_paths(config_path: str) -> _DataPaths:
+    """Parse data file paths from a TOML training config.
+
+    Reads the [data] section to determine where the merge step should write
+    so output paths match what the training loop expects.
+    """
+    with open(config_path, "rb") as f:
+        cfg = tomllib.load(f)
+    data = cfg.get("data", {})
+    training_file = data.get("training_file", "data/train.csv")
+    tokenizer_file = data.get("tokenizer_file", "data/tokenizer.json")
+    return _DataPaths(training_file=training_file, tokenizer_file=tokenizer_file)
 
 
 def _check_training_done(
@@ -161,7 +185,8 @@ def run_cloud_train(
     gpu_count: int = 1,
     disk_gb: int = 50,
     project_root: Path | None = None,
-    s3_data: str | None = None,
+    s3_bucket: str | None = None,
+    s3_year: int | None = None,
 ) -> None:
     """Provision a cloud GPU, upload code, and launch training in a detached tmux session.
 
@@ -179,17 +204,17 @@ def run_cloud_train(
         gpu_count: Number of GPUs to request.
         disk_gb: Disk space in GB.
         project_root: Local project root (auto-detected if None).
-        s3_data: S3 URI for training data. Pod pulls from S3 instead of SCP upload.
+        s3_bucket: S3 bucket with prepared CSVs. Pod merges from S3 instead of SCP.
+        s3_year: Year of prepared data to merge (required with s3_bucket).
     """
     if project_root is None:
         project_root = Path.cwd()
 
     # Pre-flight checks before spending money on a pod
-    if s3_data:
-        if not s3_data.startswith("s3://"):
-            raise ValueError(
-                f"--s3-data must be an S3 URI (e.g. s3://bucket/merged/), got: {s3_data}"
-            )
+    use_s3 = s3_bucket is not None or s3_year is not None
+    if use_s3:
+        if not s3_bucket or not s3_year:
+            raise ValueError("--s3-bucket and --s3-year must both be provided.")
         _build_aws_env()  # validates credentials are set
 
     # Block if a pod is already active
@@ -211,10 +236,10 @@ def run_cloud_train(
     instance_info = None
     client = None
 
-    total_steps = 6 if s3_data else 5
+    total_steps = 6 if use_s3 else 5
     print(f"Cloud training: {experiment_name} ({config_size}) on {provider.name}/{gpu_type}")
-    if s3_data:
-        print(f"  Data source: {s3_data}")
+    if use_s3:
+        print(f"  Data source: s3://{s3_bucket}/prepared/ ({s3_year})")
 
     try:
         # Step 1: Provision
@@ -238,14 +263,15 @@ def run_cloud_train(
 
         # Step 3: Upload
         print(f"\n[3/{total_steps}] Uploading project files...")
-        file_count = _upload_project(client, project_root, skip_data=bool(s3_data))
+        file_count = _upload_project(client, project_root, skip_data=use_s3)
         print(f"  Uploaded {file_count} files.")
 
         # Step 4: Install dependencies + tmux
+        pip_extra = '".[aws]"' if use_s3 else "."
         print(f"\n[4/{total_steps}] Installing dependencies...")
         ssh.run_command(
             client,
-            f"cd {REMOTE_PROJECT_DIR} && pip install -e . 2>&1",
+            f"cd {REMOTE_PROJECT_DIR} && pip install -e {pip_extra} 2>&1",
         )
         ssh.run_command(
             client,
@@ -253,21 +279,25 @@ def run_cloud_train(
             stream=False,
         )
 
-        # Step 5 (optional): Pull data from S3
+        # Step 5 (optional): Merge data from S3 on the pod
         next_step = 5
-        if s3_data:
-            print(f"\n[5/{total_steps}] Pulling data from S3...")
+        if use_s3:
+            assert s3_bucket is not None and s3_year is not None
+            print(f"\n[5/{total_steps}] Merging data from S3 on pod...")
             aws_env = _build_aws_env()
-            s3_cmd = (
-                f"pip install -q awscli && "
-                f"{aws_env} aws s3 sync {shlex.quote(s3_data)} "
-                f"{REMOTE_PROJECT_DIR}/data/ --quiet"
+            data_paths = _read_data_paths(config_path)
+            merge_cmd = (
+                f"{aws_env} chessgpt-prepare --merge-from-s3"
+                f" --year {s3_year}"
+                f" --bucket {shlex.quote(s3_bucket)}"
+                f" --output-csv {REMOTE_PROJECT_DIR}/{data_paths.training_file}"
+                f" --fit-tokenizer {REMOTE_PROJECT_DIR}/{data_paths.tokenizer_file}"
             )
             try:
-                ssh.run_command(client, s3_cmd)
+                ssh.run_command(client, merge_cmd)
             except RuntimeError:
                 raise RuntimeError(
-                    f"Failed to pull data from S3 ({s3_data}). "
+                    f"Failed to merge data from S3 (bucket={s3_bucket}, year={s3_year}). "
                     "Check credentials and bucket permissions."
                 ) from None
             next_step = 6
